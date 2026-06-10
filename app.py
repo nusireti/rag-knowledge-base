@@ -1,7 +1,5 @@
-"""
-RAG 知识库 - 高级版 Web 界面
-v2.2: 多知识库切换 + 文档预览
-"""
+"""RAG 知识库 - 高级版 Web 界面
+v3.0: Agent 工具调用 + 联网搜索"""
 
 import os
 import json
@@ -14,6 +12,7 @@ st.set_page_config(page_title="RAG 智能知识库", page_icon="🧠", layout="w
 
 from ingest import load_documents, split_documents, get_embedding_model, clear_embedding_cache
 from query import create_qa_chain, clear_cache, ask_stream
+from agent_tools import ask_agent
 from kb_manager import (
     list_knowledge_bases, create_knowledge_base, delete_knowledge_base,
     get_knowledge_base_info, get_documents, delete_document,
@@ -100,6 +99,7 @@ defaults = {
     "kb_name": None,
     "kb_ready": False,
     "kb_doc_count": 0,
+    "mode": "rag",  # "rag" | "agent"
 }
 for key, val in defaults.items():
     if key not in st.session_state:
@@ -348,6 +348,29 @@ with st.sidebar:
                         content = preview_document(kb, doc["name"])
                         st.text(content[:2000])
 
+    # --- 模式切换 ---
+    st.markdown("---")
+    st.markdown("**⚡ 模式**")
+    current_mode = st.session_state.mode
+    mode_options = {"rag": "📚 RAG 模式", "agent": "🤖 Agent 模式"}
+    selected_mode = st.radio(
+        "模式",
+        options=list(mode_options.keys()),
+        format_func=lambda x: mode_options[x],
+        index=0 if current_mode == "rag" else 1,
+        label_visibility="collapsed",
+        horizontal=True,
+    )
+    if selected_mode != st.session_state.mode:
+        st.session_state.mode = selected_mode
+        st.rerun()
+
+    mode_desc = {
+        "rag": "基于知识库文档回答问题，流式输出",
+        "agent": "AI 自动选择工具：知识库/联网搜索/计算器",
+    }
+    st.caption(mode_desc[st.session_state.mode])
+
     # 底部
     st.markdown("---")
     with st.expander("⚡ 高级"):
@@ -364,7 +387,7 @@ with st.sidebar:
             st.toast("已重置所有向量库", icon="🧹")
             st.rerun()
 
-    st.caption(f"v2.2 | KB: {st.session_state.kb_name}")
+    st.caption(f"v3.0 | KB: {st.session_state.kb_name} | {'📚RAG' if st.session_state.mode=='rag' else '🤖Agent'}")
 
 
 # ===================== 主对话区 =====================
@@ -394,36 +417,55 @@ else:
 
         with st.chat_message("assistant"):
             placeholder = st.empty()
-            full_response = ""
             try:
                 vec_dir = get_vector_store_dir(st.session_state.kb_name)
                 history = st.session_state.messages[:-1]
+                mode = st.session_state.mode
 
-                for chunk in ask_stream(prompt, chat_history=history, vector_dir=vec_dir):
-                    full_response += chunk
-                    if "__SOURCES__:" in full_response:
-                        break
-                    placeholder.markdown(f'<div class="chat-assistant">🤖 {full_response}▌</div>', unsafe_allow_html=True)
+                if mode == "rag":
+                    # === RAG 模式：流式输出 ===
+                    full_response = ""
+                    for chunk in ask_stream(prompt, chat_history=history, vector_dir=vec_dir):
+                        full_response += chunk
+                        if "__SOURCES__:" in full_response:
+                            break
+                        placeholder.markdown(f'<div class="chat-assistant">🤖 {full_response}▌</div>', unsafe_allow_html=True)
 
-                answer = full_response
-                sources_data = []
-                if "__SOURCES__:" in answer:
-                    parts = answer.split("__SOURCES__:")
-                    answer = parts[0]
-                    try:
-                        sources_data = json.loads(parts[1])
-                    except json.JSONDecodeError:
-                        sources_data = []
+                    answer = full_response
+                    sources_data = []
+                    if "__SOURCES__:" in answer:
+                        parts = answer.split("__SOURCES__:")
+                        answer = parts[0]
+                        try:
+                            sources_data = json.loads(parts[1])
+                        except json.JSONDecodeError:
+                            sources_data = []
 
-                placeholder.markdown(f'<div class="chat-assistant">🤖 {answer}</div>', unsafe_allow_html=True)
-                if sources_data:
-                    for s in sources_data:
-                        st.markdown(f'<div class="source-card"><span class="tag">📄 {s.get("source", "文档")}</span>{s.get("content", "")}</div>', unsafe_allow_html=True)
+                    placeholder.markdown(f'<div class="chat-assistant">🤖 {answer}</div>', unsafe_allow_html=True)
+                    if sources_data:
+                        for s in sources_data:
+                            st.markdown(f'<div class="source-card"><span class="tag">📄 {s.get("source", "文档")}</span>{s.get("content", "")}</div>', unsafe_allow_html=True)
 
-                st.session_state.messages.append({
-                    "role": "assistant", "content": answer, "sources": sources_data,
-                })
+                    st.session_state.messages.append({
+                        "role": "assistant", "content": answer, "sources": sources_data,
+                    })
+
+                else:
+                    # === Agent 模式：自动选择工具 ===
+                    with st.spinner("🤔 AI 正在思考使用什么工具..."):
+                        agent_result = ask_agent(prompt, vector_dir=vec_dir, chat_history=history)
+
+                    answer = agent_result["answer"]
+                    mode_tag = {"rag": "📚知识库", "web": "🌐联网", "direct": "💡直接回答"}.get(agent_result["mode"], "🤖Agent")
+                    display = f"{answer}\n\n---\n<sup style='color:rgba(255,255,255,0.3);font-size:0.7rem;'>回答方式: {mode_tag}</sup>"
+                    placeholder.markdown(f'<div class="chat-assistant">🤖 {display}</div>', unsafe_allow_html=True)
+
+                    st.session_state.messages.append({
+                        "role": "assistant", "content": answer + f"\n\n*(回答方式: {mode_tag})*",
+                    })
+
                 save_current_conv()
 
             except Exception as e:
                 st.error(f"出错了: {e}")
+                st.exception(e)

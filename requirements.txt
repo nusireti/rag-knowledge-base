@@ -28,3 +28,4 @@ langchain-ollama>=0.2.0
 
 # ===== 工具 =====
 tqdm>=4.66.0
+duckduckgo_search>=8.0.0
