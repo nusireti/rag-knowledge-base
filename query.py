@@ -1,14 +1,10 @@
 """
 检索 + 生成
 根据用户问题，从知识库检索相关内容并生成回答
-
-优化:
-  - embedding 模型全局缓存（只加载一次）
-  - 流式输出支持
-  - 多轮对话记忆
 """
 
 import os
+import re
 from typing import List, Optional, Generator
 from functools import lru_cache
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -18,7 +14,7 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.documents import Document
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_chroma import Chroma
 
 from config import (
@@ -36,7 +32,7 @@ from config import (
     SYSTEM_PROMPT,
 )
 
-# ============ 全局缓存（只加载一次） ============
+# ============ 全局缓存 ============
 _embedding_model_cache = None
 _vector_store_cache = None
 _llm_cache = None
@@ -44,38 +40,25 @@ _llm_stream_cache = None
 
 
 def get_embedding_model():
-    """获取 Embedding 模型（全局缓存）"""
     global _embedding_model_cache
     if _embedding_model_cache is not None:
         return _embedding_model_cache
-
     if EMBEDDING_PROVIDER == "openai":
         if not OPENAI_API_KEY:
-            raise ValueError("使用 OpenAI Embedding 但未设置 OPENAI_API_KEY")
+            raise ValueError("未设置 OPENAI_API_KEY")
         _embedding_model_cache = OpenAIEmbeddings(
-            model=OPENAI_EMBEDDING_MODEL,
-            openai_api_key=OPENAI_API_KEY,
-        )
+            model=OPENAI_EMBEDDING_MODEL, openai_api_key=OPENAI_API_KEY)
     else:
         os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
         _embedding_model_cache = HuggingFaceEmbeddings(
             model_name=LOCAL_EMBEDDING_MODEL,
-            model_kwargs={
-                "device": "cpu",
-                "local_files_only": True,
-            },
-            encode_kwargs={"normalize_embeddings": True},
-        )
+            model_kwargs={"device": "cpu", "local_files_only": True},
+            encode_kwargs={"normalize_embeddings": True})
     return _embedding_model_cache
 
 
 def get_llm(streaming=False):
-    """
-    获取 LLM 模型
-    streaming=True 时返回流式版本（用于 Web 界面）
-    """
     global _llm_cache, _llm_stream_cache
-
     if streaming:
         if _llm_stream_cache is not None:
             return _llm_stream_cache
@@ -85,21 +68,12 @@ def get_llm(streaming=False):
 
     if LLM_PROVIDER == "openai":
         if not OPENAI_API_KEY:
-            raise ValueError("使用 OpenAI LLM 但未设置 OPENAI_API_KEY")
-        llm = ChatOpenAI(
-            model=OPENAI_LLM_MODEL,
-            temperature=0.3,
-            streaming=streaming,
-            openai_api_key=OPENAI_API_KEY,
-        )
+            raise ValueError("未设置 OPENAI_API_KEY")
+        llm = ChatOpenAI(model=OPENAI_LLM_MODEL, temperature=0.1,
+                         streaming=streaming, openai_api_key=OPENAI_API_KEY)
     else:
-        llm = ChatOllama(
-            model=OLLAMA_MODEL,
-            base_url=OLLAMA_BASE_URL,
-            temperature=0.3,
-            num_predict=2048,
-            num_ctx=4096,
-        )
+        llm = ChatOllama(model=OLLAMA_MODEL, base_url=OLLAMA_BASE_URL,
+                         temperature=0.1, num_predict=2048, num_ctx=4096)
 
     if streaming:
         _llm_stream_cache = llm
@@ -109,69 +83,25 @@ def get_llm(streaming=False):
 
 
 def load_vector_store(vector_dir: str = None):
-    """
-    加载已有的向量数据库（全局缓存）
-
-    参数:
-        vector_dir: 向量数据库目录（默认使用 config.VECTOR_STORE_DIR）
-    """
     global _vector_store_cache
     if vector_dir is None:
         vector_dir = VECTOR_STORE_DIR
-
     if _vector_store_cache is not None:
         return _vector_store_cache
-
-    embedding_model = get_embedding_model()
     _vector_store_cache = Chroma(
         persist_directory=vector_dir,
-        embedding_function=embedding_model,
-    )
+        embedding_function=get_embedding_model())
     return _vector_store_cache
 
 
 def refresh_vector_store(vector_dir: str = None):
-    """刷新向量数据库缓存"""
     global _vector_store_cache, _embedding_model_cache
     _vector_store_cache = None
     _embedding_model_cache = None
     return load_vector_store(vector_dir)
 
 
-def create_qa_chain(vector_dir: str = None):
-    """
-    创建问答链（兼容旧接口）
-    参数:
-        vector_dir: 向量数据库目录（默认使用 config.VECTOR_STORE_DIR）
-    返回: (chain, retriever)
-    """
-    from langchain_core.prompts import ChatPromptTemplate
-    from langchain_core.output_parsers import StrOutputParser
-    from langchain_core.runnables import RunnablePassthrough
-
-    vector_store = load_vector_store(vector_dir)
-    retriever = vector_store.as_retriever(
-        search_type=RETRIEVAL_SEARCH_TYPE,
-        search_kwargs={"k": RETRIEVAL_K},
-    )
-    llm = get_llm(streaming=False)
-
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", SYSTEM_PROMPT),
-        ("human", "以下是与问题相关的文档内容：\n\n{context}\n\n---\n\n问题：{question}"),
-    ])
-
-    chain = (
-        {"context": retriever | format_docs, "question": RunnablePassthrough()}
-        | prompt
-        | llm
-        | StrOutputParser()
-    )
-    return chain, retriever
-
-
 def clear_cache():
-    """清空所有缓存"""
     global _embedding_model_cache, _vector_store_cache, _llm_cache, _llm_stream_cache
     _embedding_model_cache = None
     _vector_store_cache = None
@@ -180,90 +110,136 @@ def clear_cache():
 
 
 def format_docs(docs: List[Document]) -> str:
-    """把检索到的文档拼接成上下文"""
     texts = []
     for i, doc in enumerate(docs, 1):
-        source = doc.metadata.get("source", "未知来源")
-        texts.append(f"[来源 {i}: {source}]\n{doc.page_content}")
+        src = doc.metadata.get("source", "未知来源")
+        texts.append(f"[来源 {i}: {src}]\n{doc.page_content}")
     return "\n\n---\n\n".join(texts)
 
 
 def retrieve_docs(question: str, vector_dir: str = None) -> List[Document]:
-    """只检索文档（不生成回答）"""
-    vector_store = load_vector_store(vector_dir)
-    retriever = vector_store.as_retriever(
+    vs = load_vector_store(vector_dir)
+    retriever = vs.as_retriever(
         search_type=RETRIEVAL_SEARCH_TYPE,
-        search_kwargs={"k": RETRIEVAL_K},
-    )
+        search_kwargs={"k": RETRIEVAL_K})
     return retriever.invoke(question)
 
 
-def build_prompt_with_history(question: str, context: str, chat_history: List[dict] = None) -> str:
+def _build_messages(question: str, context: str, chat_history: List[dict] = None):
     """
-    构建包含对话历史的提示词
-    chat_history: [{"role": "user"/"assistant", "content": "..."}]
+    构建带正确角色分工的消息列表。
+    系统指令作为 SystemMessage，对话历史 + 当前问题作为 HumanMessage。
+    这才是 LLM 能正确理解的关键。
     """
-    history_str = ""
+    messages = [SystemMessage(content=SYSTEM_PROMPT)]
+
+    # 对话历史
     if chat_history and len(chat_history) > 2:
-        # 只保留最近 4 轮对话（避免太长）
         recent = chat_history[-8:] if len(chat_history) > 8 else chat_history
         for msg in recent:
-            role = "用户" if msg["role"] == "user" else "AI"
-            history_str += f"{role}: {msg['content']}\n"
+            if msg["role"] == "user":
+                # 如果历史消息中有来源信息，附加到消息中
+                content = msg["content"]
+                if "sources" in msg and msg["sources"]:
+                    src_text = "\n".join(
+                        f"  [{s.get('source','文档')}] {s.get('content','')[:100]}"
+                        for s in msg["sources"][:2])
+                    content += f"\n(参考来源:\n{src_text})"
+                messages.append(HumanMessage(content=content))
+            else:
+                messages.append(AIMessage(content=msg["content"]))
 
-    parts = [SYSTEM_PROMPT]
+    # 当前问题 + 文档上下文
+    if context.strip():
+        user_content = f"""以下是与问题相关的文档内容：
 
-    if history_str:
-        parts.append(f"以下是对话历史：\n{history_str}")
+{context}
 
-    parts.append(f"以下是与问题相关的文档内容：\n{context}\n---\n问题：{question}")
+---
 
-    return "\n\n".join(parts)
+请基于上面提供的文档内容回答用户的问题。
+如果文档内容与问题无关或没有足够信息，请如实说"文档中没有相关信息"。
+
+问题: {question}"""
+    else:
+        user_content = f"""没有检索到相关的文档内容。
+
+问题: {question}"""
+
+    messages.append(HumanMessage(content=user_content))
+    return messages
+
+
+def clean_deepseek_output(text: str) -> str:
+    cleaned = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
+    cleaned = cleaned.strip()
+    cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
+    return cleaned
 
 
 def ask(question: str, vector_dir: str = None) -> dict:
-    """
-    问答（非流式，用于终端模式）
-    返回: {"question", "answer", "source_documents"}
-    """
+    """问答（非流式，用于终端模式）"""
     source_docs = retrieve_docs(question, vector_dir)
     context = format_docs(source_docs)
+    messages = _build_messages(question, context)
 
     llm = get_llm(streaming=False)
-    user_prompt = build_prompt_with_history(question, context)
-    answer = llm.invoke(user_prompt).content
+    raw_answer = llm.invoke(messages).content
+    answer = clean_deepseek_output(raw_answer)
 
-    return {
-        "question": question,
-        "answer": answer,
-        "source_documents": source_docs,
-    }
+    return {"question": question, "answer": answer, "source_documents": source_docs}
 
 
 def ask_stream(question: str, chat_history: List[dict] = None, vector_dir: str = None) -> Generator[str, None, None]:
     """
     流式问答（用于 Web 界面）
-    先检索文档，再流式输出回答
-
-    参数:
-        question: 问题
-        chat_history: 对话历史
-        vector_dir: 向量数据库目录（默认使用 config.VECTOR_STORE_DIR）
+    使用正确的 SystemMessage/HumanMessage 角色分工
     """
-    # 检索文档
     source_docs = retrieve_docs(question, vector_dir)
     context = format_docs(source_docs)
+    messages = _build_messages(question, context, chat_history)
 
-    # 构建提示词
-    user_prompt = build_prompt_with_history(question, context, chat_history)
-
-    # 流式调用 LLM
+    # 流式调用，实时过滤 <think> 标签
     llm = get_llm(streaming=True)
-    for chunk in llm.stream(user_prompt):
-        yield chunk.content
+    in_think = False
+    think_buffer = ""
 
-    # 把来源信息作为最后一个特殊 chunk 返回
-    # 格式: __SOURCES__: json_string
+    for chunk in llm.stream(messages):
+        content = chunk.content
+        if not content:
+            continue
+
+        if in_think:
+            think_buffer += content
+            end_idx = think_buffer.find("</think>")
+            if end_idx >= 0:
+                remaining = think_buffer[end_idx + 8:]
+                if remaining.strip():
+                    remaining = re.sub(r'^\s*\n\s*', '\n', remaining)
+                    yield remaining
+                think_buffer = ""
+                in_think = False
+            continue
+
+        start_idx = content.find("<think>")
+        if start_idx >= 0:
+            before = content[:start_idx]
+            if before.strip():
+                yield before
+            in_think = True
+            think_buffer = content[start_idx + 7:]
+            end_idx = think_buffer.find("</think>")
+            if end_idx >= 0:
+                remaining = think_buffer[end_idx + 8:]
+                if remaining.strip():
+                    yield remaining
+                think_buffer = ""
+                in_think = False
+            continue
+
+        yield content
+
+    # 来源信息
     sources_data = []
     for doc in source_docs[:4]:
         sources_data.append({
@@ -274,46 +250,43 @@ def ask_stream(question: str, chat_history: List[dict] = None, vector_dir: str =
     yield f"\n\n__SOURCES__:{json.dumps(sources_data, ensure_ascii=False)}"
 
 
+def create_qa_chain(vector_dir: str = None):
+    """创建 LCEL 问答链（兼容旧接口）"""
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", SYSTEM_PROMPT),
+        ("human", "以下是与问题相关的文档内容：\n\n{context}\n\n---\n\n问题：{question}"),
+    ])
+    vs = load_vector_store(vector_dir)
+    retriever = vs.as_retriever(
+        search_type=RETRIEVAL_SEARCH_TYPE,
+        search_kwargs={"k": RETRIEVAL_K})
+    llm = get_llm(streaming=False)
+    chain = (
+        {"context": retriever | format_docs, "question": RunnablePassthrough()}
+        | prompt | llm | StrOutputParser())
+    return chain, retriever
+
+
 def interactive_mode():
     """终端交互模式"""
     print("=" * 50)
     print("RAG 知识库问答系统")
     print("=" * 50)
-    print(f"  模型: {OLLAMA_MODEL}")
-    print(f"  输入 'exit' 退出")
-    print("=" * 50)
-
-    # 预加载
-    print("\n加载模型中...")
     load_vector_store()
-    print("就绪！\n")
-
-    chat_history = []
-
+    print("就绪！输入 'exit' 退出\n")
+    history = []
     while True:
-        question = input("\n请输入问题: ").strip()
-        if question.lower() in ("exit", "quit", "q"):
-            print("再见！")
+        q = input("\n问题: ").strip()
+        if q.lower() in ("exit", "quit", "q"):
             break
-        if not question:
+        if not q:
             continue
-
-        print("\n思考中...\n")
-        try:
-            result = ask(question)
-            print(f"{result['answer']}")
-
-            chat_history.append({"role": "user", "content": question})
-            chat_history.append({"role": "assistant", "content": result['answer']})
-
-            if result["source_documents"]:
-                print(f"\n参考来源:")
-                for i, doc in enumerate(result["source_documents"][:3], 1):
-                    src = doc.metadata.get("source", "未知")
-                    preview = doc.page_content[:80].replace("\n", " ")
-                    print(f"  {i}. [{src}] {preview}...")
-        except Exception as e:
-            print(f"出错: {e}")
+        result = ask(q)
+        print(f"\n{result['answer']}")
+        history.extend([
+            {"role": "user", "content": q},
+            {"role": "assistant", "content": result['answer']},
+        ])
 
 
 if __name__ == "__main__":

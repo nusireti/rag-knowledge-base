@@ -77,13 +77,13 @@ st.markdown("""
     section[data-testid="stSidebar"] { background: rgba(15,15,26,0.95) !important; border-right: 1px solid rgba(255,255,255,0.06); }
     #MainMenu {visibility: hidden;} footer {visibility: hidden;}
     div[data-testid="stChatInput"] {
-        background: rgba(255,255,255,0.08) !important; border-radius: 24px !important;
-        border: 1px solid rgba(255,255,255,0.15) !important;
+        background: rgba(255,255,255,0.18) !important; border-radius: 24px !important;
+        border: 1px solid rgba(255,255,255,0.3) !important;
     }
     div[data-testid="stChatInput"] textarea {
         color: #FFFFFF !important; font-size: 1rem !important; caret-color: #6C5CE7 !important;
     }
-    div[data-testid="stChatInput"] textarea::placeholder { color: rgba(255,255,255,0.4) !important; }
+    div[data-testid="stChatInput"] textarea::placeholder { color: rgba(255,255,255,0.8) !important; }
     div[data-testid="stChatInput"]:focus-within {
         border-color: #6C5CE7 !important; box-shadow: 0 0 0 3px rgba(108,92,231,0.25) !important;
     }
@@ -245,19 +245,21 @@ with st.sidebar:
             st.rerun()
 
     # 新建知识库
-    with st.expander("＋ 新建知识库", expanded=False):
-        new_name = st.text_input("名称", placeholder="英文/数字/下划线", key="new_kb_name", label_visibility="collapsed")
-        new_display = st.text_input("显示名", placeholder="我的知识库", key="new_kb_display", label_visibility="collapsed")
-        if st.button("创建", use_container_width=True):
+    with st.popover("＋ 新建知识库", help="创建一个新的独立知识库"):
+        new_name = st.text_input("标识符", placeholder="如: my-notes", help="字母/数字/下划线/中划线", key="new_kb_name")
+        new_display = st.text_input("显示名称", placeholder="如: 我的笔记", help="可读的名称", key="new_kb_display")
+        new_desc = st.text_input("描述（可选）", placeholder="这个知识库用来做什么", key="new_kb_desc")
+        if st.button("创建知识库", use_container_width=True, type="primary"):
             safe_name = "".join(c for c in new_name.strip() if c.isalnum() or c in "_-") if new_name else ""
             if safe_name:
-                if create_knowledge_base(safe_name, new_display or safe_name):
+                if create_knowledge_base(safe_name, new_display or safe_name, new_desc or ""):
+                    st.success(f"✅ 知识库 [{new_display or safe_name}] 已创建！")
                     switch_kb(safe_name)
                     st.rerun()
                 else:
-                    st.error("创建失败（可能已存在）")
+                    st.error("创建失败（名称可能已存在）")
             else:
-                st.error("请输入有效名称")
+                st.error("请输入有效的标识符（字母/数字/下划线）")
 
     # 删除当前知识库
     if current_kb and len(kbs) > 1:
@@ -308,11 +310,33 @@ with st.sidebar:
     kb = st.session_state.kb_name
     if kb:
         st.markdown(f"**📤 上传到 [{current_kb['display_name'] if current_kb else kb}]**")
-        uploaded = st.file_uploader("选择文件", type=["pdf", "txt", "md", "docx"], accept_multiple_files=True, label_visibility="collapsed")
+
+        # 用动态 key 防止上传后无限循环
+        if "upload_key" not in st.session_state:
+            st.session_state.upload_key = 0
+
+        uploaded = st.file_uploader(
+            "选择文件", type=["pdf", "txt", "md", "docx"],
+            accept_multiple_files=True, label_visibility="collapsed",
+            key=f"upload_{st.session_state.upload_key}",
+        )
+
         if uploaded:
+            saved = 0
             for f in uploaded:
                 save_uploaded_file(kb, f.name, f.getbuffer())
-            st.toast(f"已保存 {len(uploaded)} 个文件", icon="✅")
+                saved += 1
+
+            # 递增 key 清空 uploader 状态，防止重复触发
+            st.session_state.upload_key += 1
+
+            # 自动重建知识库
+            with st.spinner(f"已保存 {saved} 个文件，正在建立索引..."):
+                ok = rebuild_current_kb()
+            if ok:
+                st.success(f"✅ 已保存 {saved} 个文件并建立索引，现在可以提问了！")
+            else:
+                st.info(f"已保存 {saved} 个文件，但没有可索引的文档内容")
             st.rerun()
 
         col_r1, col_r2 = st.columns(2)
@@ -395,77 +419,94 @@ title = st.session_state.conv_title or "新对话"
 kb_name = current_kb["display_name"] if current_kb else "未选择知识库"
 st.markdown(f"#### 💬 {title}  ·  `📚 {kb_name}`")
 
-if not st.session_state.kb_ready:
-    st.info("💡 请先在左侧上传文档，然后点击 **「刷新知识库」** 开始使用")
-else:
-    for msg in st.session_state.messages:
-        role = msg["role"]
-        content = msg["content"]
-        if role == "user":
-            st.markdown(f'<div class="chat-user">💬 {content}</div>', unsafe_allow_html=True)
-        else:
-            st.markdown(f'<div class="chat-assistant">🤖 {content}</div>', unsafe_allow_html=True)
-            if "sources" in msg and msg["sources"]:
-                for s in msg["sources"]:
-                    src_label = s.get("source", "文档") if isinstance(s, dict) else "文档"
-                    src_content = s.get("content", "") if isinstance(s, dict) else str(s)
-                    st.markdown(f'<div class="source-card"><span class="tag">📄 {src_label}</span>{src_content}</div>', unsafe_allow_html=True)
+# 显示历史消息
+for msg in st.session_state.messages:
+    role = msg["role"]
+    content = msg["content"]
+    if role == "user":
+        st.markdown(f'<div class="chat-user">💬 {content}</div>', unsafe_allow_html=True)
+    else:
+        st.markdown(f'<div class="chat-assistant">🤖 {content}</div>', unsafe_allow_html=True)
+        if "sources" in msg and msg["sources"]:
+            for s in msg["sources"]:
+                src_label = s.get("source", "文档") if isinstance(s, dict) else "文档"
+                src_content = s.get("content", "") if isinstance(s, dict) else str(s)
+                st.markdown(f'<div class="source-card"><span class="tag">📄 {src_label}</span>{src_content}</div>', unsafe_allow_html=True)
 
-    if prompt := st.chat_input("输入你的问题..."):
-        st.markdown(f'<div class="chat-user">💬 {prompt}</div>', unsafe_allow_html=True)
-        st.session_state.messages.append({"role": "user", "content": prompt})
+# 输入框始终显示（不管知识库是否就绪）
+input_disabled = False
+input_placeholder = "输入你的问题..."
+if not st.session_state.kb_ready and st.session_state.mode == "rag":
+    input_disabled = False
+    input_placeholder = "知识库尚未加载，但我仍然可以和你聊天（切换到 Agent 模式可联网搜索）..."
 
-        with st.chat_message("assistant"):
-            placeholder = st.empty()
-            try:
-                vec_dir = get_vector_store_dir(st.session_state.kb_name)
-                history = st.session_state.messages[:-1]
-                mode = st.session_state.mode
+if prompt := st.chat_input(input_placeholder, disabled=input_disabled):
+    st.markdown(f'<div class="chat-user">💬 {prompt}</div>', unsafe_allow_html=True)
+    st.session_state.messages.append({"role": "user", "content": prompt})
 
-                if mode == "rag":
-                    # === RAG 模式：流式输出 ===
-                    full_response = ""
-                    for chunk in ask_stream(prompt, chat_history=history, vector_dir=vec_dir):
-                        full_response += chunk
-                        if "__SOURCES__:" in full_response:
-                            break
-                        placeholder.markdown(f'<div class="chat-assistant">🤖 {full_response}▌</div>', unsafe_allow_html=True)
+    with st.chat_message("assistant"):
+        placeholder = st.empty()
+        try:
+            vec_dir = get_vector_store_dir(st.session_state.kb_name) if st.session_state.kb_name else None
+            history = st.session_state.messages[:-1]
+            mode = st.session_state.mode
 
-                    answer = full_response
-                    sources_data = []
-                    if "__SOURCES__:" in answer:
-                        parts = answer.split("__SOURCES__:")
-                        answer = parts[0]
-                        try:
-                            sources_data = json.loads(parts[1])
-                        except json.JSONDecodeError:
-                            sources_data = []
+            if mode == "rag" and st.session_state.kb_ready:
+                # === RAG 模式：流式输出 ===
+                full_response = ""
+                for chunk in ask_stream(prompt, chat_history=history, vector_dir=vec_dir):
+                    full_response += chunk
+                    if "__SOURCES__:" in full_response:
+                        break
+                    placeholder.markdown(f'<div class="chat-assistant">🤖 {full_response}▌</div>', unsafe_allow_html=True)
 
-                    placeholder.markdown(f'<div class="chat-assistant">🤖 {answer}</div>', unsafe_allow_html=True)
-                    if sources_data:
-                        for s in sources_data:
-                            st.markdown(f'<div class="source-card"><span class="tag">📄 {s.get("source", "文档")}</span>{s.get("content", "")}</div>', unsafe_allow_html=True)
+                answer = full_response
+                sources_data = []
+                if "__SOURCES__:" in answer:
+                    parts = answer.split("__SOURCES__:")
+                    answer = parts[0]
+                    try:
+                        sources_data = json.loads(parts[1])
+                    except json.JSONDecodeError:
+                        sources_data = []
 
-                    st.session_state.messages.append({
-                        "role": "assistant", "content": answer, "sources": sources_data,
-                    })
+                import re
+                # 安全过滤：移除任何残留的 <think> 标签
+                answer_clean = re.sub(r'<think>.*?</think>', '', answer, flags=re.DOTALL).strip()
+                placeholder.markdown(f'<div class="chat-assistant">🤖 {answer_clean}</div>', unsafe_allow_html=True)
+                if sources_data:
+                    for s in sources_data:
+                        st.markdown(f'<div class="source-card"><span class="tag">📄 {s.get("source", "文档")}</span>{s.get("content", "")}</div>', unsafe_allow_html=True)
 
-                else:
-                    # === Agent 模式：自动选择工具 ===
-                    with st.spinner("🤔 AI 正在思考使用什么工具..."):
-                        agent_result = ask_agent(prompt, vector_dir=vec_dir, chat_history=history)
+                st.session_state.messages.append({
+                    "role": "assistant", "content": answer_clean, "sources": sources_data,
+                })
 
-                    answer = agent_result["answer"]
-                    mode_tag = {"rag": "📚知识库", "web": "🌐联网", "direct": "💡直接回答"}.get(agent_result["mode"], "🤖Agent")
-                    display = f"{answer}\n\n---\n<sup style='color:rgba(255,255,255,0.3);font-size:0.7rem;'>回答方式: {mode_tag}</sup>"
-                    placeholder.markdown(f'<div class="chat-assistant">🤖 {display}</div>', unsafe_allow_html=True)
+            elif mode == "agent" or not st.session_state.kb_ready:
+                # === Agent 模式（或 RAG 模式但 KB 未就绪）：直接用 LLM 回答 ===
+                with st.spinner("🤔 思考中..."):
+                    if mode == "agent":
+                        agent_result = ask_agent(prompt, vector_dir=vec_dir if st.session_state.kb_ready else None, chat_history=history)
+                        from query import clean_deepseek_output
+                        answer = clean_deepseek_output(agent_result["answer"])
+                        mode_tag = {"rag": "📚知识库", "web": "🌐联网", "direct": "💡直接回答"}.get(agent_result["mode"], "🤖Agent")
+                        display = f"{answer}\n\n---\n<sup style='color:rgba(255,255,255,0.3);font-size:0.7rem;'>回答方式: {mode_tag}</sup>"
+                        placeholder.markdown(f'<div class="chat-assistant">🤖 {display}</div>', unsafe_allow_html=True)
+                        st.session_state.messages.append({
+                            "role": "assistant", "content": answer + f"\n\n*(回答方式: {mode_tag})*",
+                        })
+                    else:
+                        # RAG 模式但 KB 未就绪：直接让 LLM 回答
+                        from query import get_llm, clean_deepseek_output
+                        llm = get_llm()
+                        answer = llm.invoke(prompt).content
+                        answer_clean = clean_deepseek_output(answer)
+                        placeholder.markdown(f'<div class="chat-assistant">🤖 {answer_clean}</div>', unsafe_allow_html=True)
+                        st.session_state.messages.append({
+                            "role": "assistant", "content": answer_clean + "\n\n*(无知识库，AI 基于自身知识回答)*",
+                        })
 
-                    st.session_state.messages.append({
-                        "role": "assistant", "content": answer + f"\n\n*(回答方式: {mode_tag})*",
-                    })
+            save_current_conv()
 
-                save_current_conv()
-
-            except Exception as e:
-                st.error(f"出错了: {e}")
-                st.exception(e)
+        except Exception as e:
+            st.error(f"出错了: {e}")

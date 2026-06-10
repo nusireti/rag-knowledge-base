@@ -1,31 +1,36 @@
-# 依赖 / 缓存
+# Python
 __pycache__/
 *.pyc
 *.pyo
+*.egg-info/
+dist/
+build/
+
+# 环境
 .env
+.env.local
 
-# 向量数据库（运行后自动生成）
+# 数据（运行时生成）
+data/
 vector_store/
-knowledge_bases/*/vector_store/
-
-# 用户数据（对话历史、知识库文档和向量库）
-conversations/
 knowledge_bases/
+conversations/
 
-# Streamlit 日志
+# 日志
+*.log
 streamlit.log
 
-# 操作系统文件
+# 操作系统
 .DS_Store
 Thumbs.db
-
-# 用户文档
-documents/*.pdf
-documents/*.docx
-documents/*.pptx
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+
+# 文档缓存
+documents/*.pdf
+documents/*.docx
+documents/*.pptx

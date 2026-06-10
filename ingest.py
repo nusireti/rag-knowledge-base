@@ -11,8 +11,8 @@ from langchain_community.document_loaders import (
     PyPDFLoader,
     TextLoader,
     UnstructuredMarkdownLoader,
-    UnstructuredWordDocumentLoader,
 )
+from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_openai import OpenAIEmbeddings
@@ -65,6 +65,28 @@ def clear_embedding_cache():
     _embedding_model_cache = None
 
 
+def _load_docx(file_path: str):
+    """使用 python-docx 加载 DOCX 文件（比 Unstructured 更稳更快）"""
+    try:
+        from docx import Document as DocxDocument
+        doc = DocxDocument(file_path)
+        # 提取所有段落文字
+        paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
+        # 也提取表格中的文字
+        for table in doc.tables:
+            for row in table.rows:
+                row_text = " | ".join(cell.text for cell in row.cells if cell.text.strip())
+                if row_text.strip():
+                    paragraphs.append(row_text)
+        full_text = "\n".join(paragraphs) if paragraphs else ""
+        if not full_text.strip():
+            return []
+        return [Document(page_content=full_text, metadata={"source": os.path.basename(file_path)})]
+    except Exception as e:
+        print(f"    ❌ DOCX 加载失败: {e}")
+        return []
+
+
 def load_documents(docs_dir: str):
     """加载目录下所有支持的文档（自动去重）"""
     docs_dir = Path(docs_dir)
@@ -80,7 +102,7 @@ def load_documents(docs_dir: str):
         ".pdf": PyPDFLoader,
         ".txt": TextLoader,
         ".md": UnstructuredMarkdownLoader,
-        ".docx": UnstructuredWordDocumentLoader,
+        ".docx": "docx",  # 使用自定义 loader
     }
 
     for ext, loader_class in supported_extensions.items():
@@ -93,8 +115,14 @@ def load_documents(docs_dir: str):
 
             try:
                 print(f"  加载: {file_path.name}")
-                loader = loader_class(str(file_path))
-                documents = loader.load()
+
+                # 自定义 DOCX 加载器（使用 python-docx，比 Unstructured 快且稳定）
+                if loader_class == "docx":
+                    documents = _load_docx(str(file_path))
+                else:
+                    loader = loader_class(str(file_path))
+                    documents = loader.load()
+
                 for doc in documents:
                     doc.metadata["source"] = file_path.name
                 all_documents.extend(documents)
