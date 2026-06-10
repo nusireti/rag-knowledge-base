@@ -137,20 +137,32 @@ def create_vector_store(chunks, embedding_model):
     return vector_store
 
 
-def ingest():
-    """主流程：加载 -> 切分 -> 向量化 -> 存储"""
+def ingest(docs_dir: str = None, vector_dir: str = None):
+    """
+    主流程：加载 -> 切分 -> 向量化 -> 存储
+
+    参数:
+        docs_dir: 文档目录（默认使用 config.DOCUMENTS_DIR）
+        vector_dir: 向量数据库目录（默认使用 config.VECTOR_STORE_DIR）
+    """
+    if docs_dir is None:
+        docs_dir = DOCUMENTS_DIR
+    if vector_dir is None:
+        vector_dir = VECTOR_STORE_DIR
+
     print("=" * 50)
-    print("RAG 知识库 - 文档导入工具")
+    print(f"RAG 知识库 - 文档导入工具")
+    print(f"  文档目录: {docs_dir}")
+    print(f"  向量目录: {vector_dir}")
     print("=" * 50)
 
     # 1. 加载文档
     print("\n[1/4] 加载文档...")
-    documents = load_documents(DOCUMENTS_DIR)
+    documents = load_documents(docs_dir)
 
     if not documents:
-        print(f"\n  documents/ 目录中没有找到支持的文档！")
-        print(f"  请把 PDF/TXT/MD/DOCX 文件放到: {DOCUMENTS_DIR}")
-        print(f"\n  先放一个文档再运行吧！")
+        print(f"\n  {docs_dir} 中没有找到支持的文档！")
+        print(f"  请把 PDF/TXT/MD/DOCX 文件放进去")
         return None
 
     # 2. 切分文档
@@ -162,9 +174,19 @@ def ingest():
     embedding_model = get_embedding_model()
     print(f"  模型: {LOCAL_EMBEDDING_MODEL}")
 
-    # 4. 创建向量数据库
+    # 4. 创建向量数据库（使用指定目录）
     print(f"\n[4/4] 创建向量数据库...")
-    vs = create_vector_store(chunks, embedding_model)
+    if Path(vector_dir).exists():
+        shutil.rmtree(vector_dir)
+        print(f"  已删除旧的向量数据库: {vector_dir}")
+
+    print(f"  正在向量化并存入 ChromaDB...")
+    vector_store = Chroma.from_documents(
+        documents=chunks,
+        embedding=embedding_model,
+        persist_directory=vector_dir,
+    )
+    print(f"  完成: 共 {len(chunks)} 个向量")
 
     # 5. 统计
     source_files = set(d.metadata["source"] for d in documents)
@@ -172,10 +194,10 @@ def ingest():
     print("  导入完成！")
     print(f"  文件数: {len(source_files)}")
     print(f"  文本块: {len(chunks)}")
-    print(f"  位置: {VECTOR_STORE_DIR}")
+    print(f"  位置: {vector_dir}")
     print("=" * 50)
 
-    return vs
+    return vector_store
 
 
 if __name__ == "__main__":

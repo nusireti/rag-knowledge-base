@@ -108,40 +108,48 @@ def get_llm(streaming=False):
     return llm
 
 
-def load_vector_store():
-    """加载已有的向量数据库（全局缓存）"""
+def load_vector_store(vector_dir: str = None):
+    """
+    加载已有的向量数据库（全局缓存）
+
+    参数:
+        vector_dir: 向量数据库目录（默认使用 config.VECTOR_STORE_DIR）
+    """
     global _vector_store_cache
+    if vector_dir is None:
+        vector_dir = VECTOR_STORE_DIR
+
     if _vector_store_cache is not None:
         return _vector_store_cache
 
     embedding_model = get_embedding_model()
     _vector_store_cache = Chroma(
-        persist_directory=VECTOR_STORE_DIR,
+        persist_directory=vector_dir,
         embedding_function=embedding_model,
     )
     return _vector_store_cache
 
 
-def refresh_vector_store():
+def refresh_vector_store(vector_dir: str = None):
     """刷新向量数据库缓存"""
     global _vector_store_cache, _embedding_model_cache
     _vector_store_cache = None
     _embedding_model_cache = None
-    return load_vector_store()
+    return load_vector_store(vector_dir)
 
 
-def create_qa_chain():
+def create_qa_chain(vector_dir: str = None):
     """
     创建问答链（兼容旧接口）
+    参数:
+        vector_dir: 向量数据库目录（默认使用 config.VECTOR_STORE_DIR）
     返回: (chain, retriever)
-    chain: 接收问题字符串，返回回答字符串
-    retriever: 用于检索文档
     """
     from langchain_core.prompts import ChatPromptTemplate
     from langchain_core.output_parsers import StrOutputParser
     from langchain_core.runnables import RunnablePassthrough
 
-    vector_store = load_vector_store()
+    vector_store = load_vector_store(vector_dir)
     retriever = vector_store.as_retriever(
         search_type=RETRIEVAL_SEARCH_TYPE,
         search_kwargs={"k": RETRIEVAL_K},
@@ -180,9 +188,9 @@ def format_docs(docs: List[Document]) -> str:
     return "\n\n---\n\n".join(texts)
 
 
-def retrieve_docs(question: str) -> List[Document]:
+def retrieve_docs(question: str, vector_dir: str = None) -> List[Document]:
     """只检索文档（不生成回答）"""
-    vector_store = load_vector_store()
+    vector_store = load_vector_store(vector_dir)
     retriever = vector_store.as_retriever(
         search_type=RETRIEVAL_SEARCH_TYPE,
         search_kwargs={"k": RETRIEVAL_K},
@@ -213,12 +221,12 @@ def build_prompt_with_history(question: str, context: str, chat_history: List[di
     return "\n\n".join(parts)
 
 
-def ask(question: str) -> dict:
+def ask(question: str, vector_dir: str = None) -> dict:
     """
     问答（非流式，用于终端模式）
     返回: {"question", "answer", "source_documents"}
     """
-    source_docs = retrieve_docs(question)
+    source_docs = retrieve_docs(question, vector_dir)
     context = format_docs(source_docs)
 
     llm = get_llm(streaming=False)
@@ -232,13 +240,18 @@ def ask(question: str) -> dict:
     }
 
 
-def ask_stream(question: str, chat_history: List[dict] = None) -> Generator[str, None, None]:
+def ask_stream(question: str, chat_history: List[dict] = None, vector_dir: str = None) -> Generator[str, None, None]:
     """
     流式问答（用于 Web 界面）
     先检索文档，再流式输出回答
+
+    参数:
+        question: 问题
+        chat_history: 对话历史
+        vector_dir: 向量数据库目录（默认使用 config.VECTOR_STORE_DIR）
     """
     # 检索文档
-    source_docs = retrieve_docs(question)
+    source_docs = retrieve_docs(question, vector_dir)
     context = format_docs(source_docs)
 
     # 构建提示词

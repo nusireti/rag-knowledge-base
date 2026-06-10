@@ -6,6 +6,11 @@ __pycache__/
 
 # 向量数据库（运行后自动生成）
 vector_store/
+knowledge_bases/*/vector_store/
+
+# 用户数据（对话历史、知识库文档和向量库）
+conversations/
+knowledge_bases/
 
 # Streamlit 日志
 streamlit.log
@@ -14,7 +19,7 @@ streamlit.log
 .DS_Store
 Thumbs.db
 
-# 用户文档（占位文件保留，具体内容用户自加）
+# 用户文档
 documents/*.pdf
 documents/*.docx
 documents/*.pptx
