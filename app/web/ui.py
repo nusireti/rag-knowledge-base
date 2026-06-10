@@ -46,9 +46,14 @@ st.markdown("""
     .chat-user { background: linear-gradient(135deg, #6C5CE7 0%, #5B4BD8 100%);
         color: white; padding: 0.7rem 1.1rem; border-radius: 18px 18px 4px 18px;
         max-width: 80%; margin-left: auto; margin-bottom: 0.8rem; }
-    .chat-assistant { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08);
-        padding: 0.7rem 1.1rem; border-radius: 18px 18px 18px 4px;
-        max-width: 92%; margin-right: auto; margin-bottom: 0.8rem; line-height: 1.6; }
+    .chat-assistant { background: rgba(255,255,255,0.10); border: 1px solid rgba(255,255,255,0.15);
+        color: #E8E8FF; padding: 0.7rem 1.1rem; border-radius: 18px 18px 18px 4px;
+        max-width: 92%; margin-right: auto; margin-bottom: 0.8rem; line-height: 1.7;
+        font-size: 0.95rem; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+    .chat-assistant strong, .chat-assistant b { color: #FFFFFF; }
+    .chat-assistant code { background: rgba(108,92,231,0.2); color: #C8C0FF;
+        padding: 1px 4px; border-radius: 4px; font-size: 0.85em; }
+    .chat-assistant a { color: #a29bfe; }
     .source-card { background: rgba(108,92,231,0.08); border: 1px solid rgba(108,92,231,0.15);
         border-radius: 8px; padding: 0.4rem 0.7rem; margin: 0.2rem 0; font-size: 0.75rem; }
     .source-card .tag { background: rgba(108,92,231,0.2); color: #a29bfe;
