@@ -68,7 +68,12 @@ st.markdown("""
     div[data-testid="stChatInput"] { background: rgba(255,255,255,0.15) !important;
         border-radius: 24px !important; border: 1px solid rgba(255,255,255,0.25) !important; }
     div[data-testid="stChatInput"] textarea { color: #FFF !important; caret-color: #6C5CE7 !important; }
-    #MainMenu, footer { visibility: hidden; }
+    #MainMenu, footer { visibility: hidden; display: none; }
+    header[data-testid="stHeader"] { display: none !important; }
+    div[data-testid="stToolbar"] { display: none !important; }
+    .stApp > header { display: none !important; }
+    div[data-testid="stDecoration"] { display: none !important; }
+    button[kind="header"] { display: none !important; }
     .highlight { background: rgba(108,92,231,0.15); padding: 0 2px; border-radius: 3px; }
 </style>
 """, unsafe_allow_html=True)
@@ -91,18 +96,49 @@ if not is_authenticated():
                 else:
                     st.error("用户名或密码错误")
     with tab2:
-        with st.form("register_form"):
-            nu = st.text_input("用户名", key="reg_u")
-            np2 = st.text_input("密码", type="password", key="reg_p")
-            if st.form_submit_button("注册", use_container_width=True):
-                if len(nu) < 2:
-                    st.error("用户名至少2个字符")
-                elif len(np2) < 6:
-                    st.error("密码至少6个字符")
-                elif create_user(nu, np2):
-                    st.success("注册成功，请登录")
+        nu = st.text_input("用户名", key="reg_u")
+        ne = st.text_input("邮箱", key="reg_e", placeholder="用于验证和找回密码")
+
+        # 验证码（SMTP 启用时显示）
+        show_vcode = settings.SMTP_ENABLE and ne
+        vcode = ""
+        if show_vcode:
+            col_v1, col_v2 = st.columns([3, 1])
+            with col_v1:
+                vcode = st.text_input("验证码", key="reg_v", placeholder="输入邮箱收到的验证码")
+            with col_v2:
+                st.markdown("<br>", unsafe_allow_html=True)
+                if st.button("📨 发送验证码", key="send_vcode", use_container_width=True):
+                    from app.verify import send_verify_code
+                    if send_verify_code(ne):
+                        st.success("验证码已发送")
+                    else:
+                        st.warning("发送失败，请检查邮箱是否正确")
+
+        np1 = st.text_input("密码", type="password", key="reg_p1")
+        np2 = st.text_input("确认密码", type="password", key="reg_p2")
+
+        if st.button("注册", use_container_width=True, type="primary"):
+            errs = []
+            if len(nu) < 2: errs.append("用户名至少2个字符")
+            if len(np1) < 6: errs.append("密码至少6个字符")
+            if np1 != np2: errs.append("两次密码不一致")
+            if errs:
+                for e in errs: st.error(e)
+            elif ne and show_vcode and not vcode:
+                st.error("请输入验证码")
+            elif ne and show_vcode:
+                from app.verify import verify_code
+                if not verify_code(ne, vcode):
+                    st.error("验证码错误或已过期")
+                elif create_user(nu, np1, ne):
+                    st.success("注册成功，请登录！")
                 else:
                     st.error("注册失败")
+            elif create_user(nu, np1, ne):
+                st.success("注册成功，请登录！")
+            else:
+                st.error("注册失败")
     st.markdown('</div>', unsafe_allow_html=True)
     st.stop()
 

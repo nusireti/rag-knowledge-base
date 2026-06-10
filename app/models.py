@@ -28,7 +28,7 @@ class User(Base):
 
     id = Column(String(32), primary_key=True, default=_short_uuid)
     username = Column(String(64), unique=True, nullable=False, index=True)
-    email = Column(String(128), unique=True, nullable=True)
+    email = Column(String(128), unique=True, nullable=True, default=None)
     password_hash = Column(String(256), nullable=False)
     display_name = Column(String(64), default="")
     is_active = Column(Boolean, default=True)

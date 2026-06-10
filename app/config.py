@@ -66,6 +66,14 @@ class Settings(BaseSettings):
     USE_HYBRID_SEARCH: bool = True  # 是否使用 BM25+向量混合检索
     USE_RERANK: bool = False  # 是否使用 Cross-Encoder 重排序（较重，默认关闭）
 
+    # ---- 邮件（用于验证码、找回密码） ----
+    SMTP_ENABLE: bool = False  # 设为 True 启用邮件验证码
+    SMTP_HOST: str = "smtp.qq.com"
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""  # 你的邮箱
+    SMTP_PASSWORD: str = ""  # SMTP 授权码（非邮箱密码）
+    SMTP_FROM: str = ""  # 发件人地址
+
     # ---- 文档处理 ----
     MAX_UPLOAD_SIZE_MB: int = 50
     SUPPORTED_EXTENSIONS: list[str] = [".pdf", ".txt", ".md", ".docx"]

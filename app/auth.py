@@ -58,7 +58,7 @@ def create_user(username: str, password: str, email: str = "", display_name: str
 
         user = User(
             username=username,
-            email=email or "",
+            email=email or None,
             display_name=display_name or username,
             password_hash=hash_password(password),
         )
