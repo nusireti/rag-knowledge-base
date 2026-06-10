@@ -13,6 +13,7 @@ services:
     environment:
       - OLLAMA_KEEP_ALIVE=5m
       - OLLAMA_NUM_PARALLEL=1
+    # GPU 加速（如果主机有 NVIDIA GPU）
     deploy:
       resources:
         reservations:
@@ -24,7 +25,8 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
       interval: 30s
       timeout: 10s
-      retries: 5
+      retries: 10
+      start_period: 20s
     networks:
       - rag-network
 
@@ -45,14 +47,17 @@ services:
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
       - OLLAMA_MODEL=qwen2.5:3b
-      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - EMBEDDING_PROVIDER=local
+      - LLM_PROVIDER=local
+      - SECRET_KEY=${SECRET_KEY:-}
       - DEBUG=${DEBUG:-false}
       - STREAMLIT_PORT=8501
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      test: ["CMD", "curl", "-sf", "http://localhost:8501/"]
       interval: 30s
       timeout: 10s
       retries: 5
+      start_period: 30s
     networks:
       - rag-network
 
