@@ -1,0 +1,26 @@
+# 依赖 / 缓存
+__pycache__/
+*.pyc
+*.pyo
+.env
+
+# 向量数据库（运行后自动生成）
+vector_store/
+
+# Streamlit 日志
+streamlit.log
+
+# 操作系统文件
+.DS_Store
+Thumbs.db
+
+# 用户文档（占位文件保留，具体内容用户自加）
+documents/*.pdf
+documents/*.docx
+documents/*.pptx
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
