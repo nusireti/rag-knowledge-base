@@ -35,3 +35,6 @@ documents/*.pdf
 documents/*.docx
 documents/*.pptx
 docs/FREELANCE_PORTFOLIO.md
+claude-code-china-guide
+list_repos.py
+repos.json

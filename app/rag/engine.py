@@ -208,8 +208,30 @@ def format_docs(docs: List[Document]) -> str:
     return "\n\n---\n\n".join(texts)
 
 
-def retrieve_docs(question: str, vector_dir: Optional[str] = None) -> List[Document]:
-    """检索相关文档"""
+def retrieve_docs(
+    question: str,
+    vector_dir: Optional[str] = None,
+    use_hybrid: bool = True,
+) -> List[Document]:
+    """
+    检索相关文档（支持混合检索）
+
+    参数:
+        question: 查询文本
+        vector_dir: 向量库路径
+        use_hybrid: 是否使用 BM25+向量混合检索
+    """
+    if use_hybrid:
+        try:
+            from app.rag.hybrid import get_hybrid_retriever
+            retriever = get_hybrid_retriever(vector_dir)
+            docs = retriever.invoke(question)
+            logger.debug(f"混合检索到 {len(docs)} 个文档块")
+            return docs
+        except Exception as e:
+            logger.warning(f"混合检索失败，降级到纯向量检索: {e}")
+
+    # 纯向量检索（兜底）
     try:
         vs = get_vector_store(vector_dir)
         retriever = vs.as_retriever(
@@ -217,7 +239,7 @@ def retrieve_docs(question: str, vector_dir: Optional[str] = None) -> List[Docum
             search_kwargs={"k": settings.RETRIEVAL_K},
         )
         docs = retriever.invoke(question)
-        logger.debug(f"检索到 {len(docs)} 个文档块")
+        logger.debug(f"向量检索到 {len(docs)} 个文档块")
         return docs
     except Exception as e:
         logger.error(f"检索失败: {e}")

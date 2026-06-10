@@ -63,6 +63,8 @@ class Settings(BaseSettings):
     CHUNK_OVERLAP: int = 200
     RETRIEVAL_K: int = 6
     RETRIEVAL_SEARCH_TYPE: Literal["similarity", "mmr", "similarity_score_threshold"] = "similarity"
+    USE_HYBRID_SEARCH: bool = True  # 是否使用 BM25+向量混合检索
+    USE_RERANK: bool = False  # 是否使用 Cross-Encoder 重排序（较重，默认关闭）
 
     # ---- 文档处理 ----
     MAX_UPLOAD_SIZE_MB: int = 50
