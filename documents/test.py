@@ -1,1 +1,0 @@
-print("VS Code 配置成功")
