@@ -6,6 +6,7 @@
 
 import os
 import json
+import secrets
 import shutil
 from pathlib import Path
 from typing import List, Optional
@@ -135,13 +136,55 @@ def delete_document(kb_name: str, filename: str) -> bool:
 
 
 def save_uploaded_file(kb_name: str, filename: str, data: bytes) -> str:
-    """保存上传的文件到知识库"""
+    """保存上传的文件到知识库（带安全检查）"""
+    # 安全校验：文件名
+    filename = filename.strip().replace("\\", "/")
+    if not filename or filename.startswith(".") or ".." in filename:
+        raise ValueError("非法文件名")
+    if len(filename) > 255:
+        raise ValueError("文件名过长")
+
+    # 安全校验：只允许白名单扩展名
+    ALLOWED_EXTENSIONS = {".pdf", ".txt", ".md", ".docx"}
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise ValueError(f"不支持的文件类型: {ext}")
+
+    # 安全校验：文件大小（最大 50MB）
+    MAX_SIZE = 50 * 1024 * 1024
+    if len(data) > MAX_SIZE:
+        raise ValueError(f"文件过大（最大 {MAX_SIZE // 1024 // 1024}MB）")
+
+    # 安全校验：内容安全检查（禁止脚本、HTML 等）
+    try:
+        text_content = data.decode("utf-8", errors="ignore").lower()
+        suspicious_patterns = [
+            "<script", "<?php", "<html", "javascript:", "onload=",
+            "onerror=", "onclick=", "vbscript:", "<%", "${",
+        ]
+        for pattern in suspicious_patterns:
+            if pattern in text_content:
+                # 允许脚本内容出现在 .py .js 等编程文件中，但我们的白名单只有文档格式
+                # 对于文档格式，脚本内容是可疑的
+                if ext in (".txt", ".md", ".pdf", ".docx"):
+                    logger.warning(f"文件内容含可疑脚本标记 ({pattern}): {filename}")
+                    # 不阻止，仅记录日志（用户可能只是文档中提到了这个词）
+    except Exception:
+        pass
+
     docs_dir = _kb_docs_path(kb_name)
     os.makedirs(docs_dir, exist_ok=True)
-    fp = os.path.join(docs_dir, filename)
+
+    # 防止路径遍历攻击
+    safe_name = f"{secrets.token_hex(4)}_{filename}"
+    fp = os.path.normpath(os.path.join(docs_dir, safe_name))
+    if not fp.startswith(os.path.normpath(docs_dir)):
+        raise ValueError("路径遍历攻击已拦截")
+
     with open(fp, "wb") as f:
         f.write(data)
-    return fp
+
+    return fp, safe_name
 
 
 def get_documents_dir(kb_name: str) -> str:

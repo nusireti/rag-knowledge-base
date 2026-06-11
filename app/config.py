@@ -2,11 +2,17 @@
 应用配置
 使用 pydantic-settings 从环境变量加载，支持 .env 文件
 所有敏感信息和环境相关参数统一管理，不硬编码
+
+安全要求：
+- SECRET_KEY 必须通过环境变量或 .env 文件设置
+- 生产环境 SECRET_KEY 至少 32 位随机字符
+- 所有 API Key 通过环境变量注入，不硬编码
 """
 
 from __future__ import annotations
 
 import os
+import secrets
 from pathlib import Path
 from typing import Literal
 
@@ -27,7 +33,11 @@ class Settings(BaseSettings):
     APP_NAME: str = "RAG Knowledge Base"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = False
-    SECRET_KEY: str = "change-this-to-a-random-secret-in-production"
+
+    # SECRET_KEY: 必须通过环境变量或 .env 设置
+    # 生产环境请使用: python -c "import secrets; print(secrets.token_hex(32))"
+    # 生成一个 64 字符的随机十六进制字符串
+    SECRET_KEY: str = ""
 
     # ---- 路径 ----
     BASE_DIR: Path = Path(__file__).resolve().parent.parent
@@ -42,18 +52,23 @@ class Settings(BaseSettings):
     AUTH_COOKIE_NAME: str = "rag_session"
     AUTH_SESSION_TTL_HOURS: int = 24
     BCRYPT_ROUNDS: int = 12
+    MAX_LOGIN_ATTEMPTS: int = 5          # 连续失败次数限制
+    LOGIN_LOCKOUT_MINUTES: int = 15      # 锁定时间（分钟）
+    MIN_PASSWORD_LENGTH: int = 8         # 最小密码长度
 
     # ---- Embedding 模型 ----
-    EMBEDDING_PROVIDER: Literal["local", "openai"] = "local"
+    EMBEDDING_PROVIDER: Literal["local", "openai", "dashscope"] = "local"
     LOCAL_EMBEDDING_MODEL: str = "BAAI/bge-small-zh-v1.5"
     OPENAI_API_KEY: str = ""
     OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
+    DASHSCOPE_API_KEY: str = ""          # 通义/文心通过阿里云百炼接入
 
     # ---- LLM ----
-    LLM_PROVIDER: Literal["local", "openai"] = "local"
+    LLM_PROVIDER: Literal["local", "openai", "dashscope"] = "local"
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "qwen2.5:3b"
     OPENAI_LLM_MODEL: str = "gpt-4o-mini"
+    DASHSCOPE_LLM_MODEL: str = "qwen-plus"  # 通义千问
     LLM_TEMPERATURE: float = 0.1
     LLM_MAX_TOKENS: int = 2048
     LLM_CONTEXT_WINDOW: int = 4096
@@ -112,3 +127,57 @@ settings = Settings()
 
 # 确保数据目录存在
 settings.data_dir
+
+# ===================== 安全初始化校验 =====================
+
+def _check_secret_key():
+    """
+    校验 SECRET_KEY 是否安全配置。
+
+    - 如果 SECRET_KEY 为空，自动生成一个随机的并存入 .env
+    - 如果 SECRET_KEY 为弱密钥（默认值/太短），给出警告
+    - 生产环境建议手动设置强密钥
+    """
+    import sys
+
+    if not settings.SECRET_KEY:
+        # 自动生成 64 字符随机十六进制密钥
+        auto_key = secrets.token_hex(32)
+        settings.SECRET_KEY = auto_key
+
+        # 尝试写入 .env 文件
+        env_path = settings.BASE_DIR / ".env"
+        try:
+            existing = ""
+            if env_path.exists():
+                existing = env_path.read_text(encoding="utf-8")
+            if "SECRET_KEY=" not in existing:
+                with open(env_path, "a", encoding="utf-8") as f:
+                    f.write(f"\n# 自动生成的密钥（建议替换为自定义密钥）\nSECRET_KEY={auto_key}\n")
+                from app.logger import logger
+                logger.info(f"已自动生成 SECRET_KEY 并写入 .env 文件")
+        except Exception:
+            pass
+
+    elif len(settings.SECRET_KEY) < 32:
+        import warnings
+        warnings.warn(
+            "⚠️ SECRET_KEY 长度不足 32 位，建议使用更长的随机密钥。\n"
+            "可用以下命令生成: python -c \"import secrets; print(secrets.token_hex(32))\""
+        )
+
+    # 禁止使用默认密钥（安全红线）
+    _DEFAULT_KEYS = [
+        "change-this-to-a-random-secret-in-production",
+        "rag-kb-secret-key-2026",
+    ]
+    if settings.SECRET_KEY in _DEFAULT_KEYS:
+        settings.SECRET_KEY = secrets.token_hex(32)
+        from app.logger import logger
+        logger.warning(
+            "检测到默认 SECRET_KEY，已自动替换为随机密钥。"
+        )
+
+
+# 执行安全校验
+_check_secret_key()

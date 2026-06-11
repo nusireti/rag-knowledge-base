@@ -36,6 +36,18 @@ def get_embedding_model():
             openai_api_key=settings.OPENAI_API_KEY,
         )
         logger.info("使用 OpenAI Embedding")
+
+    elif settings.EMBEDDING_PROVIDER == "dashscope":
+        if not settings.DASHSCOPE_API_KEY:
+            raise RuntimeError("EMBEDDING_PROVIDER=dashscope 但未设置 DASHSCOPE_API_KEY")
+        from langchain_openai import OpenAIEmbeddings
+        _embedding_model = OpenAIEmbeddings(
+            model="text-embedding-v3",
+            base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+            openai_api_key=settings.DASHSCOPE_API_KEY,
+        )
+        logger.info("使用 DashScope/通义 Embedding")
+
     else:
         os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
         from langchain_huggingface import HuggingFaceEmbeddings

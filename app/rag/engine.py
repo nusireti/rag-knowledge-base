@@ -63,6 +63,18 @@ def get_llm(streaming: bool = False) -> BaseChatModel:
             openai_api_key=settings.OPENAI_API_KEY,
             **common_kwargs,
         )
+
+    elif settings.LLM_PROVIDER == "dashscope":
+        if not settings.DASHSCOPE_API_KEY:
+            raise RuntimeError("LLM_PROVIDER=dashscope 但未设置 DASHSCOPE_API_KEY")
+        llm = ChatOpenAI(
+            model=settings.DASHSCOPE_LLM_MODEL,
+            base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+            openai_api_key=settings.DASHSCOPE_API_KEY,
+            streaming=streaming,
+            **common_kwargs,
+        )
+
     else:
         # 自动检测 GPU
         num_gpu = _detect_gpu()

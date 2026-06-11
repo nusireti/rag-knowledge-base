@@ -3,7 +3,7 @@
 清爽亮色设计 · 多模型 · 混合检索 · 对话搜索
 """
 
-import os, sys, json, re, time
+import os, sys, json, re, time, secrets
 from pathlib import Path
 _root = Path(__file__).resolve().parent.parent.parent
 if str(_root) not in sys.path:
@@ -316,6 +316,7 @@ def init_state():
         "selected_model": None,
         "token_usage": {"total": 0, "history": [], "daily": 0},
         "hybrid_search": True,
+        "provider": settings.LLM_PROVIDER,
         "last_rerun": 0,
     }
     for k, v in keys.items():
@@ -617,7 +618,11 @@ with st.sidebar:
         )
         if uploaded:
             for f in uploaded:
-                save_uploaded_file(kb, f.name, f.getbuffer())
+                try:
+                    save_uploaded_file(kb, f.name, f.getbuffer())
+                except ValueError as e:
+                    st.error(f"文件上传失败: {e}")
+                    st.stop()
             st.session_state.upload_key += 1
             with st.spinner("🔄 索引中..."):
                 if rebuild_current_kb():
@@ -652,17 +657,35 @@ with st.sidebar:
 
     st.markdown("---")
 
-    # ---- 模型 + 模式 ----
-    cm1, cm2, cm3 = st.columns(3)
-    with cm1:
+    # ---- 提供商 + 模型 + 模式 ----
+    cp1, cp2, cp3, cp4 = st.columns(4)
+    with cp1:
+        st.markdown('<div class="section-title">🏭 提供商</div>', unsafe_allow_html=True)
+    with cp2:
         st.markdown('<div class="section-title">🤖 模型</div>', unsafe_allow_html=True)
-    with cm2:
+    with cp3:
         st.markdown('<div class="section-title">⚡ 模式</div>', unsafe_allow_html=True)
-    with cm3:
+    with cp4:
         st.markdown('<div class="section-title">🔀 混合</div>', unsafe_allow_html=True)
 
-    cm1, cm2, cm3 = st.columns(3)
-    with cm1:
+    cp1, cp2, cp3, cp4 = st.columns(4)
+    with cp1:
+        provider = st.selectbox(
+            "", ["local", "openai", "dashscope"],
+            index=["local", "openai", "dashscope"].index(
+                getattr(st.session_state, "provider", settings.LLM_PROVIDER)
+            ),
+            format_func=lambda x: {"local": "🖥️ Ollama", "openai": "🔵 OpenAI",
+                                    "dashscope": "🟣 通义/文心"}[x],
+            label_visibility="collapsed", key="provider_sel"
+        )
+        if provider != st.session_state.get("provider"):
+            st.session_state.provider = provider
+            os.environ["LLM_PROVIDER"] = provider
+            os.environ["EMBEDDING_PROVIDER"] = provider
+            clear_llm_cache()
+            st.rerun()
+    with cp2:
         models = st.session_state.available_models
         if models:
             idx = 0
