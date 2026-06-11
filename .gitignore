@@ -1,42 +1,30 @@
 # Python
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
 *.egg-info/
-dist/
-build/
+.venv/
+venv/
 
-# 环境
+# 环境配置
 .env
 .env.local
 
-# 数据（运行时生成）
+# 数据
 data/
-vector_store/
-knowledge_bases/
 conversations/
+knowledge_bases/
+vector_store/
+documents/
 
-# 日志
-*.log
-streamlit.log
-
-# 操作系统
+# 系统
 .DS_Store
 Thumbs.db
 
 # IDE
-.vscode/
 .idea/
+.vscode/
 *.swp
-*.swo
 
-# 文档缓存
-documents/*.pdf
-documents/*.docx
-documents/*.pptx
-docs/FREELANCE_PORTFOLIO.md
-claude-code-china-guide
-list_repos.py
-repos.json
-docs/images/auth_prompt.png
-documents/test.py
+# Claude
+.claude/
+claude-code-china-guide/

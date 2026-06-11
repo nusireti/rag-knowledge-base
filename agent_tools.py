@@ -22,36 +22,26 @@ from app.rag.engine import get_llm, clean_output, format_docs, get_vector_store
 # ============ 工具函数 ============
 
 def web_search(query: str) -> str:
-    """联网搜索（天气优先走 API，搜索走 DDGS）"""
+    """联网搜索"""
     import requests
     headers = {"User-Agent": "Mozilla/5.0"}
 
-    # 检测天气查询
+    # 天气查询优先
     weather_keywords = ["天气", "气温", "下雨", "下雪", "晴", "阴", "weather", "temperature"]
-    is_weather = any(kw in query for kw in weather_keywords)
-
-    if is_weather:
-        # 提取城市名
+    if any(kw in query for kw in weather_keywords):
         city_match = re.search(r'[一-鿿]+', query)
         if city_match:
-            city = city_match.group()
             try:
-                # wttr.in 需要 curl User-Agent 才返回纯文本
-                curl_headers = {"User-Agent": "curl/8.0"}
                 resp = requests.get(
-                    f"https://wttr.in/{city}?format=%C+%t+%h+%w&lang=zh",
-                    headers=curl_headers, timeout=10,
+                    f"https://wttr.in/{city_match.group()}?format=%C+%t+%h+%w&lang=zh",
+                    headers={"User-Agent": "curl/8.0"}, timeout=10,
                 )
                 if resp.status_code == 200 and resp.text.strip():
-                    return f"天气信息: {city} {resp.text.strip()}"
+                    return f"天气信息: {city_match.group()} {resp.text.strip()}"
             except Exception:
                 pass
 
-        # 如果中文城市名没结果，试试拼音/英文
-        if False:  # 占位，后续可加拼音转换
-            pass
-
-    # DDGS 通用搜索
+    # DuckDuckGo 搜索
     try:
         from ddgs import DDGS
         with DDGS(timeout=8) as ddgs:
@@ -70,7 +60,7 @@ def web_search(query: str) -> str:
         if r.status_code == 200:
             titles = re.findall(r'<h2><a[^>]*>(.*?)</a></h2>', r.text)
             if titles:
-                return "\n".join(f"[{i+1}] {t}" for i, t in enumerate(titles[:5]))
+                return "\n".join(f"[{i+1}] {t}" for t in titles[:5])
     except Exception:
         pass
 
@@ -96,7 +86,7 @@ def get_time(_: str = "") -> str:
     return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
-# ============ Agent（简洁版） ============
+# ============ Agent ============
 
 SYSTEM_PROMPT_AGENT = """你是一个智能助手，可以使用工具来回答问题。
 
@@ -126,7 +116,7 @@ def ask_agent(question: str, vector_dir: str = None, chat_history: list = None) 
     """
     llm = get_llm(streaming=False)
 
-    # ---- 第1步：LLM 决策（一次调用完成） ----
+    # ---- 第1步：LLM 决策 ----
     history_str = ""
     if chat_history and len(chat_history) > 6:
         for m in chat_history[-6:]:
@@ -142,12 +132,10 @@ def ask_agent(question: str, vector_dir: str = None, chat_history: list = None) 
 请决定是否需要使用工具。"""
     raw = clean_output(llm.invoke(prompt).content)
 
-    # ---- 解析 LLM 输出 ----
     answer = ""
     mode = "direct"
 
     if raw.strip().upper().startswith("TOOL:"):
-        # 解析 TOOL:工具名|参数
         try:
             parts = raw.strip().split(":", 1)[1].strip()
             tool_name, tool_input = parts.split("|", 1)
@@ -194,7 +182,6 @@ def ask_agent(question: str, vector_dir: str = None, chat_history: list = None) 
         answer = clean_output(llm.invoke(final_prompt).content)
 
     else:
-        # 直接回答
         answer = clean_output(raw)
         mode = "direct"
 

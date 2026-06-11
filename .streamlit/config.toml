@@ -1,9 +1,16 @@
 [theme]
-primaryColor = "#6C5CE7"
-backgroundColor = "#0F0F1A"
-secondaryBackgroundColor = "#1A1A2E"
-textColor = "#EAEAFF"
+primaryColor = "#7C5CFC"
+backgroundColor = "#F5F5FA"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#1A1A2E"
 font = "sans serif"
+base = "light"
 
 [server]
 maxUploadSize = 50
+
+[runner]
+fastReruns = true
+
+[browser]
+gatherUsageStats = false
