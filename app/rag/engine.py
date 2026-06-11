@@ -13,7 +13,6 @@ from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_ollama import ChatOllama
 from langchain_openai import ChatOpenAI
 
 from app.config import settings
@@ -78,7 +77,12 @@ def get_llm(streaming: bool = False) -> BaseChatModel:
             llm_kwargs["num_gpu"] = num_gpu
             logger.info(f"GPU 加速已启用 ({num_gpu} 个 GPU)")
 
-        llm = ChatOllama(**llm_kwargs)
+        try:
+            from langchain_ollama import ChatOllama
+            llm = ChatOllama(**llm_kwargs)
+        except ImportError:
+            logger.error("langchain-ollama 未安装，无法使用本地模型")
+            raise RuntimeError("使用 LLM_PROVIDER=local 需要安装 langchain-ollama")
 
     if streaming:
         _llm_stream_cache = llm

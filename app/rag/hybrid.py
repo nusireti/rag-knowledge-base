@@ -12,7 +12,6 @@ from typing import List, Optional, Tuple
 
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
-from rank_bm25 import BM25Okapi
 
 from app.config import settings
 from app.logger import logger
@@ -35,7 +34,7 @@ class HybridRetriever:
     def __init__(self, vector_dir: str):
         self.vector_dir = vector_dir
         self.vector_store: Optional[Chroma] = None
-        self.bm25: Optional[BM25Okapi] = None
+        self.bm25 = None
         self.bm25_docs: List[Document] = []
         self._bm25_path = Path(vector_dir) / "bm25_index.pkl"
 
@@ -73,6 +72,10 @@ class HybridRetriever:
             collection = vs._collection
             all_data = collection.get(include=["documents", "metadatas"])
             if all_data and all_data["documents"]:
+                BM25Okapi = self._get_bm25()
+                if BM25Okapi is None:
+                    logger.warning("rank_bm25 未安装，跳过 BM25 索引构建")
+                    return
                 tokenized = [self._tokenize(doc) for doc in all_data["documents"]]
                 self.bm25 = BM25Okapi(tokenized)
                 self.bm25_docs = [
@@ -85,6 +88,14 @@ class HybridRetriever:
                 logger.info(f"BM25 索引已构建: {len(self.bm25_docs)} 文档")
         except Exception as e:
             logger.warning(f"BM25 索引构建失败（不影响向量检索）: {e}")
+
+    @staticmethod
+    def _get_bm25():
+        try:
+            from rank_bm25 import BM25Okapi
+            return BM25Okapi
+        except ImportError:
+            return None
 
     @staticmethod
     def _tokenize(text: str) -> List[str]:
