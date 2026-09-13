@@ -25,6 +25,10 @@ Thumbs.db
 .vscode/
 *.swp
 
+# 个人职业文档（公开仓库，不纳入版本管理）
+docs/AI方向定位分析.md
+docs/实习冲刺方案.md
+
 # Claude
 .claude/
 claude-code-china-guide/
