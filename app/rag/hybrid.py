@@ -218,8 +218,32 @@ class HybridRetriever:
             return docs
 
 
+# 按向量库目录缓存检索器实例。
+# 早先每次调用都新建，而实例内部会重新打开一次 Chroma、重新加载 BM25 索引，
+# 等于每次问答都白白重开一遍向量库。
+_hybrid_cache: dict = {}
+
+
 def get_hybrid_retriever(vector_dir: str = None) -> HybridRetriever:
-    """获取混合检索器实例"""
+    """获取混合检索器实例（按目录缓存）"""
+    vector_dir = str(Path(vector_dir or settings.vector_store_dir).resolve())
+    cached = _hybrid_cache.get(vector_dir)
+    if cached is not None:
+        return cached
+
+    retriever = HybridRetriever(vector_dir)
+    _hybrid_cache[vector_dir] = retriever
+    return retriever
+
+
+def clear_hybrid_cache(vector_dir: str = None):
+    """
+    清空混合检索器缓存
+
+    重建/删除文档后必须调用：实例内缓存了 Chroma 句柄和 BM25 索引，
+    不清的话旧的 bm25_index.pkl 还在内存里，已删的文档照样被召回。
+    """
     if vector_dir is None:
-        vector_dir = str(settings.vector_store_dir)
-    return HybridRetriever(vector_dir)
+        _hybrid_cache.clear()
+        return
+    _hybrid_cache.pop(str(Path(vector_dir).resolve()), None)

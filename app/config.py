@@ -57,7 +57,9 @@ class Settings(BaseSettings):
     MIN_PASSWORD_LENGTH: int = 8         # 最小密码长度
 
     # ---- Embedding 模型 ----
-    EMBEDDING_PROVIDER: Literal["local", "openai", "dashscope", "deepseek"] = "local"
+    # 注意: DeepSeek 不提供 embeddings 接口，因此这里没有 "deepseek" 选项。
+    # 选 DeepSeek 作为 LLM 提供商时，Embedding 仍需使用 local / openai / dashscope。
+    EMBEDDING_PROVIDER: Literal["local", "openai", "dashscope"] = "local"
     LOCAL_EMBEDDING_MODEL: str = "BAAI/bge-small-zh-v1.5"
     OPENAI_API_KEY: str = ""
     OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
@@ -70,6 +72,7 @@ class Settings(BaseSettings):
     OLLAMA_MODEL: str = "qwen2.5:3b"
     OPENAI_LLM_MODEL: str = "gpt-4o-mini"
     DASHSCOPE_LLM_MODEL: str = "qwen-plus"  # 通义千问
+    DEEPSEEK_LLM_MODEL: str = "deepseek-chat"  # DeepSeek，可选 deepseek-chat / deepseek-reasoner
     LLM_TEMPERATURE: float = 0.1
     LLM_MAX_TOKENS: int = 1024
     LLM_CONTEXT_WINDOW: int = 2048

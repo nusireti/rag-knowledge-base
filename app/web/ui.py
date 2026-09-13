@@ -15,8 +15,10 @@ from app.logger import logger
 from app.auth import authenticate_user, create_user, create_session
 from app.web.state import get_current_user, is_authenticated, set_auth, clear_auth
 from app.rag.engine import ask_stream, clear_llm_cache
-from app.rag.ingest import load_all_documents, split_documents, build_vector_store
-from app.rag.embed import clear_embedding_cache
+from app.rag.ingest import (
+    load_all_documents, split_documents, build_vector_store,
+    remove_document_chunks, clear_index,
+)
 from agent_tools import ask_agent
 from kb_manager import (
     list_knowledge_bases, create_knowledge_base, delete_knowledge_base,
@@ -304,9 +306,12 @@ def switch_kb(kb_name):
     vec_dir = get_vector_store_dir(kb_name)
     if os.path.exists(vec_dir) and any(os.scandir(vec_dir)):
         try:
-            st.session_state.kb_ready = True
             docs = load_all_documents(get_documents_dir(kb_name))
-            st.session_state.kb_doc_count = len(docs) if docs else 0
+            # 有文档才算"就绪"：向量库目录可能还在，但文档已全部删除、
+            # 切块也已清空，这时不该显示"就绪"（否则问什么都会硬答）。
+            if docs:
+                st.session_state.kb_ready = True
+                st.session_state.kb_doc_count = len(docs)
         except Exception:
             pass
 
@@ -316,17 +321,21 @@ def rebuild_current_kb():
     if not kb:
         return False
     clear_llm_cache()
-    clear_embedding_cache()
     docs_dir = get_documents_dir(kb)
     vec_dir = get_vector_store_dir(kb)
     documents = load_all_documents(docs_dir)
     if not documents:
+        # 文档全删光了。这时必须把向量库一并清空，
+        # 否则库里还留着已删文档的切块，问什么都能答出来。
+        clear_index(vec_dir)
+        st.session_state.kb_ready = False
+        st.session_state.kb_doc_count = 0
         return False
     chunks = split_documents(documents)
+    # 这里不再清 embedding 缓存：embedding 模型在运行期不会变，
+    # 清了只会让每次重建都重新加载一遍 BGE 模型（数秒）。
+    # BM25 索引文件、向量库缓存、检索器缓存的失效由 build_vector_store 内部负责。
     build_vector_store(chunks, vec_dir, overwrite=True)
-    bm25_cache = Path(vec_dir) / "bm25_index.pkl"
-    if bm25_cache.exists():
-        bm25_cache.unlink()
     st.session_state.kb_ready = True
     st.session_state.kb_doc_count = len(documents)
     return True
@@ -619,7 +628,16 @@ with st.sidebar:
                                 st.text(preview_document(kb, doc["name"])[:1500])
                     with cols[1]:
                         if st.button("✕", key=f"fd_{doc['name']}"):
-                            delete_document(kb, doc["name"]); st.rerun()
+                            filename = doc["name"]
+                            delete_document(kb, filename)
+                            # 只删文件是不够的：向量块还留在库里，
+                            # 已删掉的文档照样会被检索出来、写进答案。
+                            # 优先增量删除（只删该文件的切块）；
+                            # 返回 <=0 说明没匹配上（旧格式索引），回退全量重建。
+                            if remove_document_chunks(get_vector_store_dir(kb), filename) <= 0:
+                                rebuild_current_kb()
+                            switch_kb(kb)
+                            st.rerun()
 
         cr1, cr2 = st.columns(2)
         with cr1:
@@ -647,8 +665,13 @@ with st.sidebar:
         )
         if provider != st.session_state.get("provider"):
             st.session_state.provider = provider
+            # 只切 LLM 提供商，不再连 EMBEDDING_PROVIDER 一起改。
+            # 早先两个一起改有两个问题：
+            #   1) embedding 模型是全局缓存的，只改环境变量不清缓存，根本不生效
+            #   2) 真换成了别的 embedding 模型，向量维度对不上，
+            #      已有向量库会当场作废 —— 检索要么报错要么乱答
+            # 所以 embedding 保持配置文件里的设定，LLM 与 embedding 解耦。
             os.environ["LLM_PROVIDER"] = provider
-            os.environ["EMBEDDING_PROVIDER"] = provider
             clear_llm_cache()
             st.rerun()
     with c2:

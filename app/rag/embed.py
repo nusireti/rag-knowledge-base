@@ -56,15 +56,14 @@ def get_embedding_model():
         logger.info("使用 DashScope/通义 Embedding")
 
     elif provider == "deepseek":
-        if not settings.DEEPSEEK_API_KEY:
-            raise RuntimeError("EMBEDDING_PROVIDER=deepseek 但未设置 DEEPSEEK_API_KEY")
-        from langchain_openai import OpenAIEmbeddings
-        _embedding_model = OpenAIEmbeddings(
-            model="deepseek-v4-flash",
-            base_url="https://api.deepseek.com",
-            openai_api_key=settings.DEEPSEEK_API_KEY,
+        # DeepSeek 只提供 Chat 接口，没有 embeddings 接口。
+        # 早先这里挂了个不存在的模型名（deepseek-v4-flash），调用必然 404。
+        # 这里 fail-fast，避免"看起来切换成功、检索却全空"的隐性故障。
+        raise RuntimeError(
+            "DeepSeek 不提供 Embedding 接口，无法作为 EMBEDDING_PROVIDER。\n"
+            "请把 EMBEDDING_PROVIDER 设为 local / openai / dashscope；"
+            "DeepSeek 只能作为 LLM_PROVIDER。"
         )
-        logger.info("使用 DeepSeek Embedding")
 
     else:
         os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")

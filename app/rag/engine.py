@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 import re
+from pathlib import Path
 from typing import Generator, List, Optional
 
 from langchain_chroma import Chroma
@@ -24,6 +25,22 @@ from app.rag.embed import get_embedding_model
 def _get_provider() -> str:
     """获取当前 LLM 提供商（优先级：环境变量 > 配置文件）"""
     return os.environ.get("LLM_PROVIDER", settings.LLM_PROVIDER)
+
+
+def _get_ollama_model() -> str:
+    """
+    获取当前 Ollama 模型名（优先级：环境变量 > 配置文件）
+
+    settings.OLLAMA_MODEL 是 pydantic 字段，进程启动那一刻就固化了。
+    界面上"切换模型"只改环境变量，所以这里必须每次动态读，
+    否则切换是空操作 —— 界面显示变了、实际答话的还是旧模型。
+    """
+    return os.environ.get("OLLAMA_MODEL", settings.OLLAMA_MODEL)
+
+
+def _get_ollama_base_url() -> str:
+    """获取当前 Ollama 服务地址（支持运行时切换）"""
+    return os.environ.get("OLLAMA_BASE_URL", settings.OLLAMA_BASE_URL)
 
 
 # ---- LLM 工厂 ----
@@ -88,7 +105,7 @@ def get_llm(streaming: bool = False) -> BaseChatModel:
         if not settings.DEEPSEEK_API_KEY:
             raise RuntimeError("LLM_PROVIDER=deepseek 但未设置 DEEPSEEK_API_KEY")
         llm = ChatOpenAI(
-            model="deepseek-v4-flash",
+            model=settings.DEEPSEEK_LLM_MODEL,
             base_url="https://api.deepseek.com",
             openai_api_key=settings.DEEPSEEK_API_KEY,
             streaming=streaming,
@@ -99,8 +116,8 @@ def get_llm(streaming: bool = False) -> BaseChatModel:
         # 自动检测 GPU
         num_gpu = _detect_gpu()
         llm_kwargs = {
-            "model": settings.OLLAMA_MODEL,
-            "base_url": settings.OLLAMA_BASE_URL,
+            "model": _get_ollama_model(),
+            "base_url": _get_ollama_base_url(),
             "num_predict": settings.LLM_MAX_TOKENS,
             "num_ctx": settings.LLM_CONTEXT_WINDOW,
             **common_kwargs,
@@ -211,27 +228,41 @@ def _build_messages(
 
 # ---- 向量存储 ----
 
-_vector_store_cache = None
+# 按向量库目录缓存，key = 规范化后的绝对路径。
+# 早先这里是单个全局变量，忽略 vector_dir —— 一旦切换知识库就会串味：
+# 混合检索失败降级到纯向量检索时，会拿到上一个知识库的向量库，
+# 于是答出另一个库的内容，且是静默的、偶发的。
+_vector_store_cache: dict = {}
 
 
 def get_vector_store(vector_dir: Optional[str] = None) -> Chroma:
-    """获取向量存储实例（全局缓存）"""
-    global _vector_store_cache
-    vector_dir = vector_dir or str(settings.vector_store_dir)
+    """获取向量存储实例（按目录缓存，不同知识库互不影响）"""
+    vector_dir = str(Path(vector_dir or settings.vector_store_dir).resolve())
+    key = vector_dir
 
-    if _vector_store_cache is not None:
-        return _vector_store_cache
+    cached = _vector_store_cache.get(key)
+    if cached is not None:
+        return cached
 
-    _vector_store_cache = Chroma(
+    store = Chroma(
         persist_directory=vector_dir,
         embedding_function=get_embedding_model(),
     )
-    return _vector_store_cache
+    _vector_store_cache[key] = store
+    return store
 
 
-def clear_vector_store_cache():
-    global _vector_store_cache
-    _vector_store_cache = None
+def clear_vector_store_cache(vector_dir: Optional[str] = None):
+    """
+    清空向量库缓存。
+
+    vector_dir 为 None 时清空全部；否则只清指定目录。
+    重建索引后必须调用，否则缓存里还指着已被删除的旧目录。
+    """
+    if vector_dir is None:
+        _vector_store_cache.clear()
+        return
+    _vector_store_cache.pop(str(Path(vector_dir).resolve()), None)
 
 
 # ---- 检索 ----
