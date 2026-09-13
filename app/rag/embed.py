@@ -12,6 +12,11 @@ from app.config import settings
 from app.logger import logger
 
 
+def _get_provider() -> str:
+    """获取当前 Embedding 提供商（优先级：环境变量 > 配置文件）"""
+    return os.environ.get("EMBEDDING_PROVIDER", settings.EMBEDDING_PROVIDER)
+
+
 # 全局缓存
 _embedding_model = None
 
@@ -27,7 +32,9 @@ def get_embedding_model():
     if _embedding_model is not None:
         return _embedding_model
 
-    if settings.EMBEDDING_PROVIDER == "openai":
+    provider = _get_provider()
+
+    if provider == "openai":
         if not settings.OPENAI_API_KEY:
             raise RuntimeError("EMBEDDING_PROVIDER=openai 但未设置 OPENAI_API_KEY")
         from langchain_openai import OpenAIEmbeddings
@@ -37,7 +44,7 @@ def get_embedding_model():
         )
         logger.info("使用 OpenAI Embedding")
 
-    elif settings.EMBEDDING_PROVIDER == "dashscope":
+    elif provider == "dashscope":
         if not settings.DASHSCOPE_API_KEY:
             raise RuntimeError("EMBEDDING_PROVIDER=dashscope 但未设置 DASHSCOPE_API_KEY")
         from langchain_openai import OpenAIEmbeddings
@@ -47,6 +54,17 @@ def get_embedding_model():
             openai_api_key=settings.DASHSCOPE_API_KEY,
         )
         logger.info("使用 DashScope/通义 Embedding")
+
+    elif provider == "deepseek":
+        if not settings.DEEPSEEK_API_KEY:
+            raise RuntimeError("EMBEDDING_PROVIDER=deepseek 但未设置 DEEPSEEK_API_KEY")
+        from langchain_openai import OpenAIEmbeddings
+        _embedding_model = OpenAIEmbeddings(
+            model="deepseek-v4-flash",
+            base_url="https://api.deepseek.com",
+            openai_api_key=settings.DEEPSEEK_API_KEY,
+        )
+        logger.info("使用 DeepSeek Embedding")
 
     else:
         os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")

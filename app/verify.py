@@ -66,14 +66,19 @@ def verify_code(email: str, code: str) -> bool:
     """验证验证码"""
     record = _codes.get(email)
     if not record:
+        logger.warning(f"验证码失败: 找不到邮箱 {email} 的记录（_codes 中现有 {len(_codes)} 条记录）")
         return False
 
-    if time.time() - record["time"] > 300:  # 5 分钟过期
+    elapsed = time.time() - record["time"]
+    if elapsed > 300:  # 5 分钟过期
         del _codes[email]
+        logger.warning(f"验证码失败: {email} 的验证码已过期（{elapsed:.0f}秒前发送）")
         return False
 
     if record["code"] != code:
+        logger.warning(f"验证码失败: {email} 验证码不匹配（预期={record['code']}, 收到={code}）")
         return False
 
     del _codes[email]
+    logger.info(f"验证码验证成功: {email}")
     return True

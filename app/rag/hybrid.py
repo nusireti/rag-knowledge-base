@@ -116,7 +116,7 @@ class HybridRetriever:
         k: int = None,
         vector_weight: float = 0.6,
         bm25_weight: float = 0.4,
-        rerank: bool = True,
+        rerank: bool = settings.USE_RERANK,
     ) -> List[Document]:
         """
         混合检索

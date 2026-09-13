@@ -6,6 +6,7 @@ RAG 问答引擎
 from __future__ import annotations
 
 import json
+import os
 import re
 from typing import Generator, List, Optional
 
@@ -18,6 +19,12 @@ from langchain_openai import ChatOpenAI
 from app.config import settings
 from app.logger import logger
 from app.rag.embed import get_embedding_model
+
+
+def _get_provider() -> str:
+    """获取当前 LLM 提供商（优先级：环境变量 > 配置文件）"""
+    return os.environ.get("LLM_PROVIDER", settings.LLM_PROVIDER)
+
 
 # ---- LLM 工厂 ----
 
@@ -54,7 +61,9 @@ def get_llm(streaming: bool = False) -> BaseChatModel:
         "temperature": settings.LLM_TEMPERATURE,
     }
 
-    if settings.LLM_PROVIDER == "openai":
+    provider = _get_provider()
+
+    if provider == "openai":
         if not settings.OPENAI_API_KEY:
             raise RuntimeError("LLM_PROVIDER=openai 但未设置 OPENAI_API_KEY")
         llm = ChatOpenAI(
@@ -64,13 +73,24 @@ def get_llm(streaming: bool = False) -> BaseChatModel:
             **common_kwargs,
         )
 
-    elif settings.LLM_PROVIDER == "dashscope":
+    elif provider == "dashscope":
         if not settings.DASHSCOPE_API_KEY:
             raise RuntimeError("LLM_PROVIDER=dashscope 但未设置 DASHSCOPE_API_KEY")
         llm = ChatOpenAI(
             model=settings.DASHSCOPE_LLM_MODEL,
             base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
             openai_api_key=settings.DASHSCOPE_API_KEY,
+            streaming=streaming,
+            **common_kwargs,
+        )
+
+    elif provider == "deepseek":
+        if not settings.DEEPSEEK_API_KEY:
+            raise RuntimeError("LLM_PROVIDER=deepseek 但未设置 DEEPSEEK_API_KEY")
+        llm = ChatOpenAI(
+            model="deepseek-v4-flash",
+            base_url="https://api.deepseek.com",
+            openai_api_key=settings.DEEPSEEK_API_KEY,
             streaming=streaming,
             **common_kwargs,
         )
@@ -86,7 +106,8 @@ def get_llm(streaming: bool = False) -> BaseChatModel:
             **common_kwargs,
         }
         if num_gpu > 0:
-            llm_kwargs["num_gpu"] = num_gpu
+            # num_gpu=-1 让 Ollama 尽可能把模型层加载进 GPU（RTX4060 8G 显存足够）
+            llm_kwargs["num_gpu"] = -1
             logger.info(f"GPU 加速已启用 ({num_gpu} 个 GPU)")
 
         try:

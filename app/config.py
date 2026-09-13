@@ -57,26 +57,27 @@ class Settings(BaseSettings):
     MIN_PASSWORD_LENGTH: int = 8         # 最小密码长度
 
     # ---- Embedding 模型 ----
-    EMBEDDING_PROVIDER: Literal["local", "openai", "dashscope"] = "local"
+    EMBEDDING_PROVIDER: Literal["local", "openai", "dashscope", "deepseek"] = "local"
     LOCAL_EMBEDDING_MODEL: str = "BAAI/bge-small-zh-v1.5"
     OPENAI_API_KEY: str = ""
     OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
     DASHSCOPE_API_KEY: str = ""          # 通义/文心通过阿里云百炼接入
+    DEEPSEEK_API_KEY: str = ""           # DeepSeek API Key
 
     # ---- LLM ----
-    LLM_PROVIDER: Literal["local", "openai", "dashscope"] = "local"
+    LLM_PROVIDER: Literal["local", "openai", "dashscope", "deepseek"] = "local"
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "qwen2.5:3b"
     OPENAI_LLM_MODEL: str = "gpt-4o-mini"
     DASHSCOPE_LLM_MODEL: str = "qwen-plus"  # 通义千问
     LLM_TEMPERATURE: float = 0.1
-    LLM_MAX_TOKENS: int = 2048
-    LLM_CONTEXT_WINDOW: int = 4096
+    LLM_MAX_TOKENS: int = 1024
+    LLM_CONTEXT_WINDOW: int = 2048
 
     # ---- RAG ----
     CHUNK_SIZE: int = 1000
     CHUNK_OVERLAP: int = 200
-    RETRIEVAL_K: int = 6
+    RETRIEVAL_K: int = 4
     RETRIEVAL_SEARCH_TYPE: Literal["similarity", "mmr", "similarity_score_threshold"] = "similarity"
     USE_HYBRID_SEARCH: bool = True  # 是否使用 BM25+向量混合检索
     USE_RERANK: bool = False  # 是否使用 Cross-Encoder 重排序（较重，默认关闭）

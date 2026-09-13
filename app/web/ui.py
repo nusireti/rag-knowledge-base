@@ -34,143 +34,135 @@ from app.models import User
 PAGE_CSS = """
 <style>
     /* ===== 字体 ===== */
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
     * { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
     code, pre { font-family: 'JetBrains Mono', monospace !important; }
 
-    /* ===== 全局亮色 ===== */
+    /* ===== 全局 - 浅蓝商务风 ===== */
     .stApp {
-        background: #F5F5FA;
-        background-image:
-            radial-gradient(ellipse 80% 60% at 50% 0%, rgba(124,92,252,0.04) 0%, transparent 60%);
+        background: #F5F7FA;
     }
     section[data-testid="stSidebar"] {
         background: #FFFFFF !important;
-        border-right: 1px solid rgba(0,0,0,0.06);
+        border-right: 1px solid #E2E8F0;
+        box-shadow: 2px 0 12px rgba(0,0,0,0.03);
     }
     section[data-testid="stSidebar"] .stButton button {
         background: transparent !important;
         border: none !important;
-        color: #555 !important;
+        color: #4A5568 !important;
         text-align: left !important;
-        padding: 6px 12px !important;
+        padding: 8px 14px !important;
         border-radius: 8px !important;
         font-size: 0.85rem !important;
-        transition: all 0.2s ease !important;
+        transition: all 0.15s ease !important;
     }
     section[data-testid="stSidebar"] .stButton button:hover {
-        background: rgba(124,92,252,0.08) !important;
-        color: #7C5CFC !important;
+        background: #EBF0FF !important;
+        color: #6C8CFF !important;
     }
 
     /* ===== 卡片 ===== */
     .glass-card {
         background: #FFFFFF;
-        border: 1px solid rgba(0,0,0,0.06);
-        border-radius: 16px;
+        border: 1px solid #E2E8F0;
+        border-radius: 14px;
         padding: 1.5rem;
-        box-shadow: 0 2px 12px rgba(0,0,0,0.04);
-        transition: all 0.3s ease;
+        box-shadow: 0 1px 6px rgba(0,0,0,0.04);
+        transition: all 0.2s ease;
     }
-    .glass-card:hover { box-shadow: 0 4px 20px rgba(124,92,252,0.1); border-color: rgba(124,92,252,0.2); }
+    .glass-card:hover { box-shadow: 0 4px 16px rgba(108,140,255,0.08); border-color: #CBD5E0; }
 
     /* ===== 头部 ===== */
     .app-header {
-        background: linear-gradient(135deg, #7C5CFC 0%, #9D8BFF 100%);
-        border-radius: 16px;
-        padding: 1.2rem 1.8rem;
+        background: linear-gradient(135deg, #6C8CFF 0%, #8BA4FF 100%);
+        border-radius: 14px;
+        padding: 1rem 1.6rem;
         margin-bottom: 1rem;
-        box-shadow: 0 4px 16px rgba(124,92,252,0.2);
+        box-shadow: 0 2px 12px rgba(108,140,255,0.2);
     }
-    .app-header h1 { color: #FFFFFF; font-weight: 700; font-size: 1.3rem; margin: 0; letter-spacing: -0.02em; }
-    .app-header p { color: rgba(255,255,255,0.75); font-size: 0.8rem; margin: 0.2rem 0 0 0; }
+    .app-header h1 { color: #FFFFFF; font-weight: 600; font-size: 1.2rem; margin: 0; letter-spacing: -0.02em; }
+    .app-header p { color: rgba(255,255,255,0.8); font-size: 0.78rem; margin: 0.15rem 0 0 0; }
 
     /* ===== 统计卡片 ===== */
-    .stat-row { display: flex; gap: 0.6rem; margin-bottom: 0.8rem; flex-wrap: wrap; }
+    .stat-row { display: flex; gap: 0.5rem; margin-bottom: 0.8rem; flex-wrap: wrap; }
     .stat-item {
         background: #FFFFFF;
-        border: 1px solid rgba(0,0,0,0.06);
+        border: 1px solid #E2E8F0;
         border-radius: 10px;
-        padding: 0.4rem 0.8rem;
+        padding: 0.35rem 0.7rem;
         text-align: center;
-        min-width: 60px;
+        min-width: 55px;
         flex: 1;
-        box-shadow: 0 1px 4px rgba(0,0,0,0.03);
     }
-    .stat-item .num { font-size: 1.1rem; font-weight: 700; color: #7C5CFC; }
-    .stat-item .label { font-size: 0.65rem; color: rgba(0,0,0,0.35);
+    .stat-item .num { font-size: 1rem; font-weight: 600; color: #6C8CFF; }
+    .stat-item .label { font-size: 0.6rem; color: #A0AEC0;
         text-transform: uppercase; letter-spacing: 0.04em; }
     .status-badge {
         display: inline-flex; align-items: center; gap: 4px;
-        padding: 4px 14px; border-radius: 20px; font-size: 0.7rem;
+        padding: 3px 12px; border-radius: 20px; font-size: 0.68rem;
         font-weight: 500;
     }
 
     /* ===== 对话气泡 ===== */
     .chat-msg {
-        padding: 0.8rem 1.2rem;
-        border-radius: 16px;
-        margin-bottom: 0.6rem;
+        padding: 0.7rem 1.1rem;
+        border-radius: 14px;
+        margin-bottom: 0.5rem;
         line-height: 1.7;
-        font-size: 0.92rem;
-        animation: msgIn 0.3s ease;
+        font-size: 0.9rem;
+        animation: msgIn 0.25s ease;
     }
     @keyframes msgIn {
-        from { opacity: 0; transform: translateY(8px); }
+        from { opacity: 0; transform: translateY(6px); }
         to { opacity: 1; transform: translateY(0); }
     }
     .chat-user {
-        background: linear-gradient(135deg, #7C5CFC 0%, #6A4AE8 100%);
+        background: #6C8CFF;
         color: white;
-        border-radius: 18px 18px 4px 18px;
-        max-width: 80%;
+        border-radius: 16px 16px 4px 16px;
+        max-width: 78%;
         margin-left: auto;
-        box-shadow: 0 2px 8px rgba(124,92,252,0.2);
+        box-shadow: 0 2px 8px rgba(108,140,255,0.15);
     }
     .chat-assistant {
         background: #FFFFFF;
-        border: 1px solid rgba(0,0,0,0.06);
-        color: #333;
-        border-radius: 18px 18px 18px 4px;
+        border: 1px solid #E2E8F0;
+        color: #2D3748;
+        border-radius: 16px 16px 16px 4px;
         max-width: 92%;
         margin-right: auto;
-        box-shadow: 0 1px 4px rgba(0,0,0,0.04);
     }
-    .chat-assistant strong, .chat-assistant b { color: #1A1A2E; }
+    .chat-assistant strong, .chat-assistant b { color: #1A202C; }
     .chat-assistant code {
-        background: rgba(124,92,252,0.1);
-        color: #7C5CFC;
+        background: #EBF0FF;
+        color: #6C8CFF;
         padding: 1px 5px;
         border-radius: 4px;
         font-size: 0.85em;
     }
     .chat-assistant pre {
-        background: #F5F5FA !important;
-        border: 1px solid rgba(0,0,0,0.06);
-        border-radius: 10px;
-        padding: 0.8rem !important;
-        overflow-x: auto;
+        background: #F7FAFC !important;
+        border: 1px solid #E2E8F0;
+        border-radius: 8px;
+        padding: 0.7rem !important;
     }
-    .chat-assistant a { color: #7C5CFC; }
+    .chat-assistant a { color: #6C8CFF; }
 
     /* ===== 来源卡片 ===== */
     .source-card {
-        background: rgba(124,92,252,0.04);
-        border: 1px solid rgba(124,92,252,0.1);
+        background: #F7FAFC;
+        border: 1px solid #E2E8F0;
         border-radius: 8px;
-        padding: 0.4rem 0.7rem;
+        padding: 0.35rem 0.7rem;
         margin: 0.2rem 0;
-        font-size: 0.72rem;
-        color: #666;
-        transition: all 0.2s;
+        font-size: 0.7rem;
+        color: #718096;
     }
-    .source-card:hover {
-        background: rgba(124,92,252,0.08);
-        border-color: rgba(124,92,252,0.2);
-    }
+    .source-card:hover { background: #EBF0FF; border-color: #CBD5E0; }
     .source-tag {
-        background: rgba(124,92,252,0.1);
-        color: #7C5CFC;
+        background: #EBF0FF;
+        color: #6C8CFF;
         padding: 1px 8px;
         border-radius: 10px;
         font-size: 0.6rem;
@@ -182,67 +174,70 @@ PAGE_CSS = """
     /* ===== 输入框 ===== */
     div[data-testid="stChatInput"] {
         background: #FFFFFF !important;
-        border-radius: 24px !important;
-        border: 1px solid rgba(0,0,0,0.1) !important;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.04) !important;
-        transition: all 0.3s ease !important;
+        border-radius: 22px !important;
+        border: 1px solid #E2E8F0 !important;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.03) !important;
+        transition: all 0.2s ease !important;
     }
     div[data-testid="stChatInput"]:focus-within {
-        border-color: rgba(124,92,252,0.4) !important;
-        box-shadow: 0 2px 12px rgba(124,92,252,0.12) !important;
+        border-color: #6C8CFF !important;
+        box-shadow: 0 0 0 3px rgba(108,140,255,0.1) !important;
     }
     div[data-testid="stChatInput"] textarea {
-        color: #333 !important;
-        caret-color: #7C5CFC !important;
-        font-size: 0.9rem !important;
+        color: #2D3748 !important;
+        caret-color: #6C8CFF !important;
+        font-size: 0.88rem !important;
     }
 
     /* ===== 按钮 ===== */
     .stButton button[kind="primary"] {
-        background: linear-gradient(135deg, #7C5CFC 0%, #6A4AE8 100%) !important;
+        background: #6C8CFF !important;
         border: none !important;
-        border-radius: 10px !important;
+        border-radius: 8px !important;
         color: white !important;
-        font-weight: 600 !important;
-        transition: all 0.2s ease !important;
+        font-weight: 500 !important;
+        font-size: 0.85rem !important;
+        transition: all 0.15s ease !important;
     }
     .stButton button[kind="primary"]:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 4px 20px rgba(124,92,252,0.3) !important;
+        background: #5A7AE8 !important;
+        box-shadow: 0 2px 10px rgba(108,140,255,0.25) !important;
     }
 
-    /* ===== tabs ===== */
+    /* ===== Tabs ===== */
     .stTabs [data-baseweb="tab-list"] { gap: 4px; }
     .stTabs [data-baseweb="tab"] {
-        background: rgba(0,0,0,0.03) !important;
+        background: #EDF2F7 !important;
         border-radius: 8px !important;
-        padding: 6px 14px !important;
+        padding: 5px 12px !important;
         font-size: 0.8rem;
+        color: #718096 !important;
     }
     .stTabs [aria-selected="true"] {
-        background: rgba(124,92,252,0.1) !important;
-        color: #7C5CFC !important;
+        background: #EBF0FF !important;
+        color: #6C8CFF !important;
+        font-weight: 500;
     }
 
-    /* ===== inputs/select ===== */
+    /* ===== 输入框/下拉 ===== */
     .stSelectbox div[data-baseweb="select"] > div,
     .stTextInput input, .stTextArea textarea {
         background: #FFFFFF !important;
-        border: 1px solid rgba(0,0,0,0.1) !important;
-        border-radius: 10px !important;
-        color: #333 !important;
+        border: 1px solid #E2E8F0 !important;
+        border-radius: 8px !important;
+        color: #2D3748 !important;
     }
 
-    /* ===== toggle ===== */
-    .stToggle label span { color: #666 !important; }
+    /* ===== Toggle ===== */
+    .stToggle label span { color: #718096 !important; }
 
-    /* ===== scrollbar ===== */
-    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    /* ===== 滚动条 ===== */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
     ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 3px; }
-    ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.2); }
+    ::-webkit-scrollbar-thumb { background: #CBD5E0; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #A0AEC0; }
 
-    /* ===== hide clutter ===== */
+    /* ===== 隐藏杂项 ===== */
     #MainMenu, footer { visibility: hidden; display: none; }
     header[data-testid="stHeader"] { display: none !important; }
     div[data-testid="stToolbar"] { display: none !important; }
@@ -250,53 +245,30 @@ PAGE_CSS = """
     div[data-testid="stDecoration"] { display: none !important; }
     button[kind="header"] { display: none !important; }
 
-    /* ===== login box ===== */
+    /* ===== 登录框 ===== */
     .login-box {
-        max-width: 400px;
-        margin: 100px auto;
-        padding: 2.5rem;
-        background: #FFFFFF;
-        border: 1px solid rgba(0,0,0,0.06);
-        border-radius: 20px;
-        box-shadow: 0 8px 32px rgba(0,0,0,0.06);
+        max-width: 400px; margin: 80px auto; padding: 2.5rem;
+        background: #FFFFFF; border: 1px solid #E2E8F0;
+        border-radius: 18px; box-shadow: 0 4px 20px rgba(0,0,0,0.05);
     }
-    .login-box h2 { color: #1A1A2E; text-align: center; margin-bottom: 1.5rem; font-weight: 700; }
+    .login-box h2 { color: #2D3748; text-align: center; margin-bottom: 1.2rem; }
 
-    /* ===== section divider ===== */
+    /* ===== 标题 ===== */
     .section-title {
-        font-size: 0.75rem;
-        font-weight: 600;
-        color: rgba(0,0,0,0.3);
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-        margin: 1rem 0 0.6rem 0;
-        padding: 0 4px;
+        font-size: 0.7rem; font-weight: 600; color: #A0AEC0;
+        text-transform: uppercase; letter-spacing: 0.06em;
+        margin: 1rem 0 0.5rem 0; padding: 0 4px;
     }
 
-    /* ===== token bar ===== */
-    .token-bar {
-        height: 3px;
-        background: rgba(0,0,0,0.06);
-        border-radius: 2px;
-        overflow: hidden;
-    }
+    /* ===== Token 进度条 ===== */
+    .token-bar { height: 3px; background: #EDF2F7; border-radius: 2px; overflow: hidden; }
     .token-bar-fill {
-        height: 100%;
-        background: linear-gradient(90deg, #7C5CFC, #9D8BFF);
-        border-radius: 2px;
-        transition: width 0.5s ease;
+        height: 100%; background: linear-gradient(90deg, #6C8CFF, #8BA4FF);
+        border-radius: 2px; transition: width 0.5s ease;
     }
 
-    /* ===== conversation item ===== */
-    .conv-item {
-        display: flex; align-items: center; justify-content: space-between;
-        padding: 6px 8px; border-radius: 8px; cursor: pointer; transition: all 0.15s;
-    }
-    .conv-item:hover { background: rgba(124,92,252,0.06); }
-    .conv-item.active { background: rgba(124,92,252,0.1);
-        border: 1px solid rgba(124,92,252,0.12); }
-    .conv-item .title { font-size: 0.82rem; color: #555; overflow: hidden;
-        text-overflow: ellipsis; white-space: nowrap; }
+    /* ===== 对话列表 ===== */
+    .conv-item { font-size: 0.82rem; color: #4A5568; }
 </style>
 """
 
@@ -412,54 +384,58 @@ if not is_authenticated():
     st.markdown("<h2>🦝 RAG 智能知识库</h2>", unsafe_allow_html=True)
     tab1, tab2 = st.tabs(["登录", "注册"])
     with tab1:
-        with st.form("login_form"):
-            u = st.text_input("用户名", placeholder="输入用户名")
-            p = st.text_input("密码", type="password", placeholder="输入密码")
-            if st.form_submit_button("登录", use_container_width=True, type="primary"):
-                user = authenticate_user(u, p)
-                if user:
-                    set_auth(create_session(user.id))
-                    st.rerun()
-                else:
-                    st.error("用户名或密码错误")
+        st.markdown("#### 登录")
+        u = st.text_input("用户名", placeholder="输入用户名")
+        p = st.text_input("密码", type="password", placeholder="输入密码")
+        if st.button("登录", use_container_width=True, type="primary"):
+            user = authenticate_user(u, p)
+            if user:
+                set_auth(create_session(user.id))
+                st.rerun()
+            else:
+                st.error("用户名或密码错误")
     with tab2:
-        with st.form("register_form"):
-            nu = st.text_input("用户名", key="reg_u", placeholder="至少2个字符")
-            ne = st.text_input("邮箱", key="reg_e", placeholder="用于验证和找回密码")
-            show_vcode = settings.SMTP_ENABLE and ne
-            vcode = ""
-            if show_vcode:
-                cv1, cv2 = st.columns([3, 1])
-                with cv1:
-                    vcode = st.text_input("验证码", key="reg_v", placeholder="输入邮箱收到的验证码")
-                with cv2:
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    if st.button("📨 发送验证码", key="send_vcode", use_container_width=True):
-                        from app.verify import send_verify_code
-                        st.success("已发送" if send_verify_code(ne) else "发送失败")
-            np1 = st.text_input("密码", type="password", key="reg_p1", placeholder="至少6个字符")
-            np2 = st.text_input("确认密码", type="password", key="reg_p2", placeholder="再次输入密码")
-            if st.form_submit_button("注册", use_container_width=True, type="primary"):
-                errs = []
-                if len(nu) < 2: errs.append("用户名至少2个字符")
-                if len(np1) < 6: errs.append("密码至少6个字符")
-                if np1 != np2: errs.append("两次密码不一致")
-                if errs:
-                    for e in errs: st.error(e)
-                elif ne and show_vcode and not vcode:
-                    st.error("请输入验证码")
-                elif ne and show_vcode:
-                    from app.verify import verify_code
-                    if not verify_code(ne, vcode):
-                        st.error("验证码错误")
-                    elif create_user(nu, np1, ne):
-                        st.success("注册成功，请登录！")
-                    else:
-                        st.error("注册失败")
+        st.markdown("#### 注册新账号")
+        nu = st.text_input("用户名", key="reg_u", placeholder="至少2个字符")
+        ne = st.text_input("邮箱", key="reg_e", placeholder="用于验证和找回密码")
+        show_vcode = settings.SMTP_ENABLE and ne
+        vcode = ""
+        if show_vcode:
+            cv1, cv2 = st.columns([3, 1])
+            with cv1:
+                vcode = st.text_input("验证码", key="reg_v", placeholder="输入邮箱收到的验证码")
+            with cv2:
+                st.markdown("<br>", unsafe_allow_html=True)
+                if st.button("📨 发送", key="send_vcode", use_container_width=True):
+                    from app.verify import send_verify_code
+                    st.success("已发送" if send_verify_code(ne) else "发送失败")
+        np1 = st.text_input("密码", type="password", key="reg_p1", placeholder="至少8个字符，需包含字母和数字")
+        np2 = st.text_input("确认密码", type="password", key="reg_p2", placeholder="再次输入密码")
+        if st.button("注册", use_container_width=True, type="primary"):
+            errs = []
+            if len(nu) < 2: errs.append("用户名至少2个字符")
+            if len(np1) < 6: errs.append("密码至少6个字符")
+            if np1 != np2: errs.append("两次密码不一致")
+
+            if errs:
+                for e in errs: st.error(e)
+            elif ne and show_vcode and not vcode:
+                st.error("请输入验证码")
+            elif ne and show_vcode:
+                from app.verify import verify_code
+                if not verify_code(ne, vcode):
+                    st.error("验证码错误或已过期")
                 elif create_user(nu, np1, ne):
                     st.success("注册成功，请登录！")
                 else:
-                    st.error("注册失败")
+                    # create_user 失败的具体原因
+                    from app.auth import get_user_by_username
+                    if get_user_by_username(nu):
+                        st.error(f"用户名 '{nu}' 已被注册，请换一个")
+                    elif ne:
+                        st.error("该邮箱已被使用")
+                    else:
+                        st.error("注册失败，请检查信息")
     st.markdown('</div>', unsafe_allow_html=True)
     st.stop()
 
@@ -493,7 +469,7 @@ st.markdown(f"""
 current_kb = get_knowledge_base_info(st.session_state.kb_name) if st.session_state.kb_name else None
 kb_ready = st.session_state.kb_ready
 badge_cls = "status-badge"
-badge_style = "background:rgba(0,200,83,0.1);color:#00C853;border:1px solid rgba(0,200,83,0.15)" if kb_ready else "background:rgba(255,152,0,0.1);color:#FF9800;border:1px solid rgba(255,152,0,0.15)"
+badge_style = "background:#E6FFFA;color:#38B2AC;border:1px solid #B2F5EA" if kb_ready else "background:#FEFCBF;color:#D69E2E;border:1px solid #FEFCBF"
 doc_count = st.session_state.kb_doc_count
 file_count = current_kb["doc_count"] if current_kb else 0
 model_name = st.session_state.selected_model or settings.OLLAMA_MODEL
@@ -657,27 +633,17 @@ with st.sidebar:
 
     st.markdown("---")
 
-    # ---- 提供商 + 模型 + 模式 ----
-    cp1, cp2, cp3, cp4 = st.columns(4)
-    with cp1:
-        st.markdown('<div class="section-title">🏭 提供商</div>', unsafe_allow_html=True)
-    with cp2:
-        st.markdown('<div class="section-title">🤖 模型</div>', unsafe_allow_html=True)
-    with cp3:
-        st.markdown('<div class="section-title">⚡ 模式</div>', unsafe_allow_html=True)
-    with cp4:
-        st.markdown('<div class="section-title">🔀 混合</div>', unsafe_allow_html=True)
-
-    cp1, cp2, cp3, cp4 = st.columns(4)
-    with cp1:
+    # ---- 提供商 + 模型（一行）----
+    c1, c2 = st.columns(2)
+    with c1:
         provider = st.selectbox(
-            "", ["local", "openai", "dashscope"],
-            index=["local", "openai", "dashscope"].index(
+            "提供商", ["local", "openai", "dashscope", "deepseek"],
+            index=["local", "openai", "dashscope", "deepseek"].index(
                 getattr(st.session_state, "provider", settings.LLM_PROVIDER)
             ),
             format_func=lambda x: {"local": "🖥️ Ollama", "openai": "🔵 OpenAI",
-                                    "dashscope": "🟣 通义/文心"}[x],
-            label_visibility="collapsed", key="provider_sel"
+                                    "dashscope": "🟣 通义/文心",
+                                    "deepseek": "🟢 DeepSeek"}[x],
         )
         if provider != st.session_state.get("provider"):
             st.session_state.provider = provider
@@ -685,7 +651,7 @@ with st.sidebar:
             os.environ["EMBEDDING_PROVIDER"] = provider
             clear_llm_cache()
             st.rerun()
-    with cp2:
+    with c2:
         models = st.session_state.available_models
         if models:
             idx = 0
@@ -700,16 +666,21 @@ with st.sidebar:
                 st.rerun()
         else:
             st.caption(st.session_state.selected_model or settings.OLLAMA_MODEL)
-    with cm2:
-        mode = st.radio("", ["rag", "agent"],
-                         format_func=lambda x: {"rag": "📚RAG", "agent": "🤖Agent"}[x],
-                         index=0 if st.session_state.mode == "rag" else 1,
-                         label_visibility="collapsed")
-        if mode != st.session_state.mode:
-            st.session_state.mode = mode; st.rerun()
-    with cm3:
-        hybrid = st.toggle("🔀", value=st.session_state.hybrid_search)
-        st.session_state.hybrid_search = hybrid
+
+    # ---- 混合检索（单独一行）----
+    hybrid = st.toggle("🔀 混合检索（BM25 + 向量）", value=st.session_state.hybrid_search)
+    st.session_state.hybrid_search = hybrid
+
+    # ---- 模式（单独一行）----
+    mode = st.radio(
+        "模式",
+        ["rag", "agent"],
+        format_func=lambda x: {"rag": "📚 RAG 知识库问答", "agent": "🤖 Agent 智能助手"}[x],
+        horizontal=True,
+    )
+    if mode != st.session_state.mode:
+        st.session_state.mode = mode
+        st.rerun()
 
     st.caption(f"KB: {st.session_state.kb_name} · v4.0")
 

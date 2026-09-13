@@ -258,10 +258,28 @@ def validate_session(token: str) -> Optional[str]:
     """
     try:
         parts = token.split(".")
-        if len(parts) == 4 and parts[0] == "v2":
+        if len(parts) == 5 and parts[0] == "v2":
             # v2 格式: v2.{user_id}.{timestamp}.{random}.{signature}
             _, user_id, timestamp, random_part, signature = parts
             payload = f"{user_id}.{timestamp}.{random_part}"
+        elif len(parts) == 3:
+            # v1 旧格式（向后兼容）: {user_id}.{timestamp}.{signature}
+            # 用 HMAC-SHA256 验证（v1 的签名方法）
+            user_id, timestamp, signature = parts
+            payload = f"{user_id}.{timestamp}"
+            expected_sig = hmac.new(
+                settings.SECRET_KEY.encode("utf-8"),
+                payload.encode("utf-8"),
+                hashlib.sha256,
+            ).hexdigest()[:16]
+            if not hmac.compare_digest(signature, expected_sig):
+                return None
+            # 检查过期
+            token_time = int(timestamp)
+            now = int(time.time())
+            if now - token_time > settings.AUTH_SESSION_TTL_HOURS * 3600:
+                return None
+            return user_id
         else:
             return None
 
