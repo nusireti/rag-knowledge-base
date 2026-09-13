@@ -1,14 +1,20 @@
 """
 文档 API: 上传、列表、删除、预览
+
+两处约定:
+1. 归属校验 —— 每个接口都先确认 kb_name 属于当前用户，否则 404
+2. 路径校验 —— kb_name / filename 全部来自 Query 参数，
+   拼路径的函数（kb_manager）会先做校验，校验失败转成 400
 """
 
 import os
-from fastapi import APIRouter, HTTPException, Header, UploadFile, File, Query
+from fastapi import APIRouter, Depends, HTTPException, Header, UploadFile, File, Query
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
 from app.auth import validate_session
 from app.logger import logger
+from backend.api.knowledge_bases import get_owned_kb_or_404
 from kb_manager import (
     get_documents, delete_document, save_uploaded_file,
     preview_document,
@@ -18,7 +24,8 @@ from kb_manager import (
 router = APIRouter()
 
 
-def _require_user(authorization: str = Header(...)):
+def _require_user(authorization: str = Header("")) -> str:
+    """从 Authorization header 解析用户，返回 user_id"""
     if not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="未登录")
     token = authorization[7:]
@@ -58,13 +65,13 @@ def _rebuild_kb_index(kb_name: str):
 
 
 @router.get("/")
-async def list_docs(
-    kb_name: str = Query(...),
-    authorization: str = Header(...),
-):
+async def list_docs(kb_name: str = Query(...), user_id: str = Depends(_require_user)):
     """获取知识库的文档列表"""
-    _require_user(authorization)
-    docs = get_documents(kb_name)
+    get_owned_kb_or_404(kb_name, user_id)
+    try:
+        docs = get_documents(kb_name)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return {"data": docs or []}
 
 
@@ -72,10 +79,10 @@ async def list_docs(
 async def upload_doc(
     kb_name: str = Query(...),
     file: UploadFile = File(...),
-    authorization: str = Header(...),
+    user_id: str = Depends(_require_user),
 ):
     """上传文档到知识库（自动增量索引）"""
-    _require_user(authorization)
+    get_owned_kb_or_404(kb_name, user_id)
     try:
         data = await file.read()
         stored_path, _safe_name = save_uploaded_file(kb_name, file.filename or "untitled", data)
@@ -100,12 +107,9 @@ async def upload_doc(
 
 
 @router.post("/rebuild")
-async def rebuild_index(
-    kb_name: str = Query(...),
-    authorization: str = Header(...),
-):
+async def rebuild_index(kb_name: str = Query(...), user_id: str = Depends(_require_user)):
     """重建知识库索引"""
-    _require_user(authorization)
+    get_owned_kb_or_404(kb_name, user_id)
     chunks = await run_in_threadpool(_rebuild_kb_index, kb_name)
     if chunks is None:
         raise HTTPException(status_code=400, detail="没有可索引的文档，或索引失败")
@@ -116,13 +120,17 @@ async def rebuild_index(
 async def delete_doc(
     kb_name: str = Query(...),
     filename: str = Query(...),
-    authorization: str = Header(...),
+    user_id: str = Depends(_require_user),
 ):
     """删除文档（同时删除其向量块）"""
     from app.rag.ingest import remove_document_chunks
 
-    _require_user(authorization)
-    delete_document(kb_name, filename)
+    get_owned_kb_or_404(kb_name, user_id)
+    try:
+        delete_document(kb_name, filename)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
     # 只删文件不够：向量块还在库里，已删除的文档照样会被检索出来。
     vec_dir = get_vector_store_dir(kb_name)
     removed = await run_in_threadpool(remove_document_chunks, vec_dir, filename)
@@ -136,10 +144,13 @@ async def delete_doc(
 async def preview_doc(
     kb_name: str = Query(...),
     filename: str = Query(...),
-    max_chars: int = Query(1500),
-    authorization: str = Header(...),
+    max_chars: int = Query(1500, ge=1, le=20000),
+    user_id: str = Depends(_require_user),
 ):
     """预览文档内容"""
-    _require_user(authorization)
-    content = preview_document(kb_name, filename, max_chars)
+    get_owned_kb_or_404(kb_name, user_id)
+    try:
+        content = preview_document(kb_name, filename, max_chars)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return {"content": content}

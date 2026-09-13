@@ -4,6 +4,7 @@
 """
 
 import os, sys, json, re, time, secrets
+from html import escape as esc
 from pathlib import Path
 _root = Path(__file__).resolve().parent.parent.parent
 if str(_root) not in sys.path:
@@ -14,7 +15,7 @@ from app.config import settings
 from app.logger import logger
 from app.auth import authenticate_user, create_user, create_session
 from app.web.state import get_current_user, is_authenticated, set_auth, clear_auth
-from app.rag.engine import ask_stream, clear_llm_cache
+from app.rag.engine import ask_stream, clear_llm_cache, start_warmup
 from app.rag.ingest import (
     load_all_documents, split_documents, build_vector_store,
     remove_document_chunks, clear_index,
@@ -24,6 +25,7 @@ from kb_manager import (
     list_knowledge_bases, create_knowledge_base, delete_knowledge_base,
     get_knowledge_base_info, get_documents, delete_document,
     save_uploaded_file, get_documents_dir, get_vector_store_dir, preview_document,
+    kb_belongs_to,
 )
 from chat_history import (
     list_conversations, create_conversation, load_conversation,
@@ -299,6 +301,18 @@ def init_state():
 
 
 # ===================== 核心功能 =====================
+
+def current_uid() -> str:
+    """
+    当前登录用户 ID
+
+    知识库和对话都按 owner_id 做归属隔离，所有读写都要带上这个值，
+    否则会看到/改到别人的数据。
+    """
+    u = get_current_user()
+    return u.id if u else ""
+
+
 def switch_kb(kb_name):
     st.session_state.kb_name = kb_name
     st.session_state.kb_ready = False
@@ -343,16 +357,16 @@ def rebuild_current_kb():
 
 def switch_conversation(conv_id):
     st.session_state.conv_id = conv_id
-    msgs = load_conversation(conv_id)
+    msgs = load_conversation(conv_id, owner_id=current_uid())
     st.session_state.messages = msgs if msgs else []
-    for c in list_conversations():
+    for c in list_conversations(owner_id=current_uid()):
         if c["id"] == conv_id:
             st.session_state.conv_title = c["title"]
             break
 
 
 def new_conversation():
-    cid = create_conversation()
+    cid = create_conversation(owner_id=current_uid())
     st.session_state.conv_id = cid
     st.session_state.conv_title = "新对话"
     st.session_state.messages = []
@@ -360,7 +374,7 @@ def new_conversation():
 
 def save_current_conv():
     if st.session_state.conv_id and st.session_state.messages:
-        save_messages(st.session_state.conv_id, st.session_state.messages)
+        save_messages(st.session_state.conv_id, st.session_state.messages, owner_id=current_uid())
 
 
 def load_available_models():
@@ -386,6 +400,9 @@ st.set_page_config(page_title="RAG 智能知识库", page_icon="🦝", layout="w
 st.markdown(PAGE_CSS, unsafe_allow_html=True)
 
 init_state()
+
+# 启动后台模型预热（内部有幂等保护，Streamlit 每次 rerun 重复调用也无妨）
+start_warmup()
 
 # ---------- 登录 ----------
 if not is_authenticated():
@@ -452,14 +469,25 @@ user = get_current_user()
 
 # ---------- 首次加载 ----------
 if st.session_state.kb_name is None:
-    kbs = list_knowledge_bases()
+    kbs = list_knowledge_bases(owner_id=current_uid())
     if kbs:
         switch_kb(kbs[0]["name"])
     else:
-        create_knowledge_base("default", "默认知识库")
-        switch_kb("default")
+        # 知识库名就是目录名，全局唯一，不能盲用 "default"：
+        # 如果这个名字已被别人占用，create 会静默失败（返回 False），
+        # 紧接着 switch_kb("default") 就会把新用户带进别人的知识库。
+        name = "default"
+        if get_knowledge_base_info(name) is not None:
+            base = re.sub(r"[^A-Za-z0-9_-]", "", user.username) or "kb"
+            name = f"{base}-kb"
+            i = 1
+            while get_knowledge_base_info(name) is not None:
+                i += 1
+                name = f"{base}-kb{i}"
+        create_knowledge_base(name, "默认知识库", owner_id=current_uid())
+        switch_kb(name)
 if st.session_state.conv_id is None:
-    convs = list_conversations()
+    convs = list_conversations(owner_id=current_uid())
     if convs:
         switch_conversation(convs[0]["id"])
     else:
@@ -471,11 +499,15 @@ if not st.session_state.available_models:
 st.markdown(f"""
 <div class="app-header">
     <h1>🦝 RAG 智能知识库 <span style="font-size:0.65rem;opacity:0.35;font-weight:500;">v4.0</span></h1>
-    <p>👋 {user.display_name or user.username} · BM25 混合检索 · 多模型切换 · 对话搜索</p>
+    <p>👋 {esc(user.display_name or user.username)} · BM25 混合检索 · 多模型切换 · 对话搜索</p>
 </div>""", unsafe_allow_html=True)
 
 # 统计行
-current_kb = get_knowledge_base_info(st.session_state.kb_name) if st.session_state.kb_name else None
+# 归属校验：kb_name 只可能来自"已按 owner 过滤的列表"，
+# 但这里再确认一次 —— 拿到 user_id 就必须真的用它，不能"验证了但不用"
+current_kb = None
+if st.session_state.kb_name and kb_belongs_to(st.session_state.kb_name, current_uid()):
+    current_kb = get_knowledge_base_info(st.session_state.kb_name)
 kb_ready = st.session_state.kb_ready
 badge_cls = "status-badge"
 badge_style = "background:#E6FFFA;color:#38B2AC;border:1px solid #B2F5EA" if kb_ready else "background:#FEFCBF;color:#D69E2E;border:1px solid #FEFCBF"
@@ -488,7 +520,7 @@ st.markdown(f"""
 <div class="stat-row">
     <div class="stat-item"><div class="num">{doc_count}</div><div class="label">文档段</div></div>
     <div class="stat-item"><div class="num">{file_count}</div><div class="label">文件数</div></div>
-    <div class="stat-item"><div class="num" style="font-size:0.8rem;">{model_name[:12]}</div><div class="label">模型</div></div>
+    <div class="stat-item"><div class="num" style="font-size:0.8rem;">{esc(model_name[:12])}</div><div class="label">模型</div></div>
     <div class="stat-item"><div class="num">{total_tokens}</div><div class="label">Token</div></div>
     <div class="stat-item" style="flex:0;min-width:auto;">
         <span class="{badge_cls}" style="{badge_style}">● {"就绪" if kb_ready else "未加载"}</span>
@@ -509,7 +541,7 @@ st.markdown(f"""
 with st.sidebar:
     st.markdown(f"<div style='display:flex;align-items:center;gap:8px;margin-bottom:4px;'>"
                 f"<span style='font-size:1.5rem;'>👤</span>"
-                f"<span style='font-weight:600;color:#1A1A2E;'>{user.username}</span></div>",
+                f"<span style='font-weight:600;color:#1A1A2E;'>{esc(user.username)}</span></div>",
                 unsafe_allow_html=True)
     if st.button("🚪 退出", use_container_width=True):
         clear_auth(); st.rerun()
@@ -517,7 +549,7 @@ with st.sidebar:
 
     # ---- 知识库 ----
     st.markdown('<div class="section-title">📚 知识库</div>', unsafe_allow_html=True)
-    for kb in list_knowledge_bases():
+    for kb in list_knowledge_bases(owner_id=current_uid()):
         active = kb["name"] == st.session_state.kb_name
         prefix = "▸" if active else " "
         if st.button(f"{prefix} {kb['display_name']} ({kb['doc_count']})",
@@ -529,13 +561,17 @@ with st.sidebar:
         nd = st.text_input("显示名", placeholder="我的知识库", label_visibility="collapsed")
         if st.button("创建", use_container_width=True, type="primary"):
             safe = re.sub(r'[^a-zA-Z0-9_-]', '', (nn or "").strip())
-            if safe and create_knowledge_base(safe, nd or safe, ""):
+            if not safe:
+                st.error("标识符不能为空（仅限字母、数字、下划线、中划线）")
+            elif create_knowledge_base(safe, nd or safe, "", owner_id=current_uid()):
                 switch_kb(safe); st.rerun()
+            else:
+                st.error(f"标识符「{safe}」已被占用，请换一个")
 
-    if current_kb and len(list_knowledge_bases()) > 1:
+    if current_kb and len(list_knowledge_bases(owner_id=current_uid())) > 1:
         if st.button(f"🗑️ [{current_kb['display_name']}]", use_container_width=True):
             delete_knowledge_base(current_kb["name"])
-            remaining = list_knowledge_bases()
+            remaining = list_knowledge_bases(owner_id=current_uid())
             if remaining:
                 switch_kb(remaining[0]["name"])
             st.rerun()
@@ -553,7 +589,7 @@ with st.sidebar:
             save_current_conv(); st.toast("已保存", icon="✅")
 
     search_query = st.text_input("🔍", placeholder="搜对话...", label_visibility="collapsed")
-    convs = list_conversations()
+    convs = list_conversations(owner_id=current_uid())
     if search_query:
         sq = search_query.lower()
         convs = [c for c in convs if sq in c["title"].lower()]
@@ -563,7 +599,7 @@ with st.sidebar:
         act_cls = "active" if active else ""
         st.markdown(f"""
         <div class="conv-item {act_cls}" onclick="console.log('click')">
-            <span class="title">{'▸ ' if active else '  '}{c['title'][:20]}</span>
+            <span class="title">{'▸ ' if active else '  '}{esc(c['title'][:20])}</span>
         </div>""", unsafe_allow_html=True)
         cols = st.columns([4, 1])
         with cols[0]:
@@ -572,15 +608,15 @@ with st.sidebar:
                 switch_conversation(c["id"]); st.rerun()
         with cols[1]:
             if st.button("✕", key=f"dc_{c['id']}"):
-                delete_conversation(c["id"])
+                delete_conversation(c["id"], owner_id=current_uid())
                 if c["id"] == st.session_state.conv_id:
-                    remaining = list_conversations()
+                    remaining = list_conversations(owner_id=current_uid())
                     switch_conversation(remaining[0]["id"]) if remaining else new_conversation()
                 st.rerun()
 
     if st.session_state.messages:
-        md = export_markdown(st.session_state.conv_id)
-        txt = export_text(st.session_state.conv_id)
+        md = export_markdown(st.session_state.conv_id, owner_id=current_uid())
+        txt = export_text(st.session_state.conv_id, owner_id=current_uid())
         cc, dd = st.columns(2)
         with cc:
             if md: st.download_button("📝 MD", md, file_name=f"chat_{st.session_state.conv_id}.md",
@@ -711,29 +747,29 @@ with st.sidebar:
 title = st.session_state.conv_title or "新对话"
 kb_display = current_kb["display_name"] if current_kb else "未选择"
 mode_icon = "📚RAG" if st.session_state.mode == "rag" else "🤖Agent"
-st.markdown(f"#### 💬 {title}", unsafe_allow_html=True)
+st.markdown(f"#### 💬 {esc(title)}", unsafe_allow_html=True)
 st.caption(f"`{kb_display}` · `{mode_icon}`")
 
 # 消息气泡
 for msg in st.session_state.messages:
     role, content = msg["role"], msg["content"]
     if role == "user":
-        st.markdown(f'<div class="chat-msg chat-user">💬 {content}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="chat-msg chat-user">💬 {esc(content)}</div>', unsafe_allow_html=True)
     else:
-        st.markdown(f'<div class="chat-msg chat-assistant">🤖 {content}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="chat-msg chat-assistant">🤖 {esc(content)}</div>', unsafe_allow_html=True)
         if "sources" in msg and msg["sources"]:
             for s in msg["sources"]:
                 src = s.get("source", "文档") if isinstance(s, dict) else "文档"
                 txt = s.get("content", "") if isinstance(s, dict) else str(s)
                 st.markdown(
                     f'<div class="source-card">'
-                    f'<span class="source-tag">📄 {src}</span>{txt}</div>',
+                    f'<span class="source-tag">📄 {esc(str(src))}</span>{esc(str(txt))}</div>',
                     unsafe_allow_html=True,
                 )
 
 # 输入
 if prompt := st.chat_input("输入你的问题..."):
-    st.markdown(f'<div class="chat-msg chat-user">💬 {prompt}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="chat-msg chat-user">💬 {esc(prompt)}</div>', unsafe_allow_html=True)
     st.session_state.messages.append({"role": "user", "content": prompt})
     st.session_state.token_usage["total"] += len(prompt)
     st.session_state.token_usage["daily"] += len(prompt)
@@ -752,7 +788,7 @@ if prompt := st.chat_input("输入你的问题..."):
                     if "__SOURCES__:" in full:
                         break
                     placeholder.markdown(
-                        f'<div class="chat-msg chat-assistant">🤖 {full}▌</div>',
+                        f'<div class="chat-msg chat-assistant">🤖 {esc(full)}▌</div>',
                         unsafe_allow_html=True,
                     )
                 answer = full
@@ -766,15 +802,15 @@ if prompt := st.chat_input("输入你的问题..."):
                         sources = []
 
                 placeholder.markdown(
-                    f'<div class="chat-msg chat-assistant">🤖 {answer}</div>',
+                    f'<div class="chat-msg chat-assistant">🤖 {esc(answer)}</div>',
                     unsafe_allow_html=True,
                 )
                 if sources:
                     for s in sources:
                         st.markdown(
                             f'<div class="source-card">'
-                            f'<span class="source-tag">📄 {s.get("source","文档")}</span>'
-                            f'{s.get("content","")}</div>',
+                            f'<span class="source-tag">📄 {esc(str(s.get("source","文档")))}</span>'
+                            f'{esc(str(s.get("content","")))}</div>',
                             unsafe_allow_html=True,
                         )
                 st.session_state.messages.append({
@@ -796,7 +832,7 @@ if prompt := st.chat_input("输入你的问题..."):
                         tag = {"rag": "📚知识库", "web": "🌐联网", "direct": "💡回答"}.get(
                             res["mode"], "🤖Agent"
                         )
-                        display = f"{answer}\n\n<sup style='color:rgba(0,0,0,0.3);font-size:0.65rem;'>回答: {tag}</sup>"
+                        display = f"{esc(answer)}\n\n<sup style='color:rgba(0,0,0,0.3);font-size:0.65rem;'>回答: {esc(tag)}</sup>"
                         placeholder.markdown(
                             f'<div class="chat-msg chat-assistant">🤖 {display}</div>',
                             unsafe_allow_html=True,
@@ -809,7 +845,7 @@ if prompt := st.chat_input("输入你的问题..."):
                         raw = get_llm().invoke(prompt).content
                         answer = clean_deepseek_output(raw)
                         placeholder.markdown(
-                            f'<div class="chat-msg chat-assistant">🤖 {answer}</div>',
+                            f'<div class="chat-msg chat-assistant">🤖 {esc(answer)}</div>',
                             unsafe_allow_html=True,
                         )
                         st.session_state.messages.append({

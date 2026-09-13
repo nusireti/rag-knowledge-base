@@ -400,7 +400,19 @@ def ask_stream(
     ]
     yield f"\n\n__SOURCES__:{json.dumps(sources_data, ensure_ascii=False)}"
 
-# 后台预热模型
-import threading
-_t = threading.Thread(target=_warmup_llm, daemon=True)
-_t.start()
+# ---- 模型预热 ----
+#
+# 早先这里是"import 即起线程"的副作用：只要 import 本模块就会联网加载模型，
+# 导致单元测试、脚本工具、CI 都被迫等它，而且失败信息藏在后台线程里。
+# 改为显式调用，由应用入口（ui.py）在启动时触发。
+_warmup_started = False
+
+
+def start_warmup():
+    """启动后台模型预热（重复调用无副作用）"""
+    global _warmup_started
+    if _warmup_started:
+        return
+    _warmup_started = True
+    import threading
+    threading.Thread(target=_warmup_llm, daemon=True).start()
