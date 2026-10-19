@@ -56,6 +56,11 @@ class Settings(BaseSettings):
     LOGIN_LOCKOUT_MINUTES: int = 15      # 锁定时间（分钟）
     MIN_PASSWORD_LENGTH: int = 8         # 最小密码长度
 
+    # ---- 接口限流（单进程内存版） ----
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_AUTH_PER_MINUTE: int = 30   # 认证接口：每 IP 每分钟
+    RATE_LIMIT_CHAT_PER_MINUTE: int = 20   # 问答接口：每 IP 每分钟
+
     # ---- Embedding 模型 ----
     # 注意: DeepSeek 不提供 embeddings 接口，因此这里没有 "deepseek" 选项。
     # 选 DeepSeek 作为 LLM 提供商时，Embedding 仍需使用 local / openai / dashscope。

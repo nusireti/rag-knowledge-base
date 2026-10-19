@@ -17,8 +17,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 
+from sqlalchemy import text
+
+from app.database import engine
+from app.ratelimit import RateLimitMiddleware
 from backend.api import auth, knowledge_bases, documents, chat, models
-from kb_manager import cleanup_deleted_kbs
+from kb_manager import KB_ROOT, cleanup_deleted_kbs
 
 # 清理上次删除知识库时因 Windows 文件句柄残留的墓碑目录
 cleanup_deleted_kbs()
@@ -32,6 +36,9 @@ app = FastAPI(
 )
 
 # ---- 安全中间件 ----
+# 限流先加、CORS 后加：Starlette 后加的在外层，429 响应也能带上 CORS 头
+app.add_middleware(RateLimitMiddleware)
+
 # CORS: 仅允许本地前端访问
 app.add_middleware(
     CORSMiddleware,
@@ -55,5 +62,21 @@ app.include_router(models.router, prefix="/api/models", tags=["模型"])
 
 @app.get("/api/health")
 async def health_check():
-    """健康检查"""
-    return {"status": "ok", "version": "4.0"}
+    """健康检查：API / 数据库 / 知识库目录"""
+    checks = {"api": "ok"}
+
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        checks["database"] = "ok"
+    except Exception as e:  # noqa: BLE001 - 健康检查要吞掉异常并如实上报
+        checks["database"] = f"error: {e}"
+
+    checks["knowledge_bases_dir"] = "ok" if os.path.isdir(KB_ROOT) else "error"
+
+    healthy = all(value == "ok" for value in checks.values())
+    return {
+        "status": "ok" if healthy else "degraded",
+        "version": "4.0",
+        "checks": checks,
+    }

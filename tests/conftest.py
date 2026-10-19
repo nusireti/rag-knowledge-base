@@ -18,6 +18,8 @@ import tempfile
 _TMP_DIR = os.path.join(tempfile.gettempdir(), "rag_pytest")
 os.makedirs(_TMP_DIR, exist_ok=True)
 os.environ["DATABASE_URL"] = f"sqlite:///{os.path.join(_TMP_DIR, 'rag_test.db')}"
+# 测试里关闭限流：否则同一 TestClient IP 下的批量请求会互相干扰
+os.environ["RATE_LIMIT_ENABLED"] = "false"
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 

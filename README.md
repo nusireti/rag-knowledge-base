@@ -1,17 +1,18 @@
 <p align="center">
-  <img src="https://img.shields.io/badge/Python-3.10+-blue?style=flat-square&logo=python" alt="Python">
-  <img src="https://img.shields.io/badge/LangChain-0.3+-green?style=flat-square" alt="LangChain">
-  <img src="https://img.shields.io/badge/Streamlit-1.36+-red?style=flat-square&logo=streamlit" alt="Streamlit">
-  <img src="https://img.shields.io/badge/SQLAlchemy-2.0+-orange?style=flat-square" alt="SQLAlchemy">
-  <img src="https://img.shields.io/badge/ChromaDB-FAISS-purple?style=flat-square" alt="Vector DB">
-  <img src="https://img.shields.io/badge/License-MIT-yellow?style=flat-square" alt="License">
-  <img src="https://img.shields.io/badge/Version-3.5-brightgreen?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/Python-3.13+-blue?style=flat-square&logo=python" alt="Python">
+  <img src="https://img.shields.io/badge/FastAPI-0.136+-009688?style=flat-square&logo=fastapi" alt="FastAPI">
+  <img src="https://img.shields.io/badge/React-19+-61DAFB?style=flat-square&logo=react" alt="React">
+  <img src="https://img.shields.io/badge/TypeScript-5.9+-3178C6?style=flat-square&logo=typescript" alt="TypeScript">
+  <img src="https://img.shields.io/badge/LangChain-1.3+-green?style=flat-square" alt="LangChain">
+  <img src="https://img.shields.io/badge/ChromaDB-1.5-purple?style=flat-square" alt="Vector DB">
+  <img src="https://img.shields.io/badge/Tests-73%20passed-success?style=flat-square" alt="Tests">
+  <img src="https://img.shields.io/badge/Version-4.2-brightgreen?style=flat-square" alt="Version">
 </p>
 
 <h1 align="center">🧠 RAG 智能知识库</h1>
 
 <p align="center">
-  <b>企业级 RAG 知识库问答系统 · v3.5</b><br>
+  <b>企业级 RAG 知识库问答系统 · v4.2</b><br>
   多用户 · 多知识库 · Agent 工具调用 · 混合检索 · 多模型切换
 </p>
 
@@ -81,9 +82,11 @@ RAG 智能知识库是一个基于 **LangChain + ChromaDB + Ollama** 的企业�
 
 ![知识库主界面](docs/images/main.png)
 
-![RAG 问答界面](docs/images/chat.png)
+![知识库文档管理](docs/images/knowledge.png)
 
-![Agent 问答界面](docs/images/agent.png)
+![AI 问答](docs/images/chat.png)
+
+![流式回答与来源](docs/images/chat-answer.png)
 
 ---
 
@@ -92,38 +95,28 @@ RAG 智能知识库是一个基于 **LangChain + ChromaDB + Ollama** 的企业�
 ### 环境要求
 
 - Python 3.10+
-- [Ollama](https://ollama.com/)（本地大模型引擎）
+- Node.js 20+
+- [Ollama](https://ollama.com/)（本地模型）或任一 OpenAI 兼容 API
 - 推荐：NVIDIA GPU（可选，CPU 也可运行）
 
-### 安装
+### 安装与启动
 
 ```bash
-# 1. 克隆项目
-git clone https://github.com/yourusername/rag-knowledge-base.git
-cd rag-knowledge-base
-
-# 2. 安装依赖
+# 1. 后端
 pip install -r requirements.txt
+cp .env.example .env          # 填 SECRET_KEY；云端模型再填对应 Key
+python -m uvicorn backend.main:app --reload --port 8000
 
-# 3. 初始化数据库
-python run.py init
-
-# 4. 下载模型（任选一个）
-ollama pull qwen2.5:3b    # 推荐：平衡速度与效果
-# ollama pull qwen2.5:1.5b  # 轻量快速版
-
-# 5. 启动
-python run.py web
+# 2. 前端（另开一个终端）
+cd frontend
+npm install
+npm run dev                   # http://localhost:5173
 ```
 
-打开 **http://localhost:8501**，注册账号即可使用。
+打开 **http://localhost:5173**，注册账号即可使用。
 
-### Docker 部署
-
-```bash
-cd docker
-docker-compose up -d
-```
+> 首次启动会自动建表；生产环境建议走 Alembic 迁移（见「数据库迁移」）。
+> 旧版 Streamlit 入口仍保留（`python run.py web`，端口 8501），已归档。
 
 ---
 
@@ -136,29 +129,36 @@ rag-knowledge-base/
 │   ├── database.py               # SQLAlchemy 数据库
 │   ├── models.py                 # ORM 模型（5 张表）
 │   ├── auth.py                   # 用户认证（bcrypt + Session）
+│   ├── ratelimit.py              # 滑动窗口限流（纯 ASGI）
 │   ├── logger.py                 # 结构化日志
 │   ├── exceptions.py             # 异常体系
 │   ├── rag/                      # RAG 引擎
-│   │   ├── engine.py             # 问答引擎（核心）
+│   │   ├── engine.py             # 问答引擎（含延迟埋点）
+│   │   ├── hybrid.py             # 向量 + BM25 + Reranker
 │   │   ├── ingest.py             # 文档导入
 │   │   ├── embed.py              # Embedding 管理
 │   │   └── loaders.py            # 文档加载器
 │   └── web/
-│       └── ui.py                 # Streamlit 界面
+│       └── ui.py                 # 旧版 Streamlit 界面（已归档）
 │
-├── docker/                       # Docker 部署
-│   ├── Dockerfile                # 多阶段构建
-│   └── docker-compose.yml        # 一键部署
+├── backend/                      # FastAPI 后端
+│   ├── main.py                   # 入口：CORS / 限流 / 健康检查
+│   └── api/                      # auth / knowledge_bases / documents / chat / models
+│
+├── frontend/                     # React 19 + TypeScript + Vite + Tailwind 4
+│   └── src/                      # 页面、布局、组件、SSE 解析
+│
+├── alembic/                      # 数据库迁移
+│   └── versions/                 # 迁移脚本
 │
 ├── scripts/                      # 运维脚本
 │   ├── init_db.py                # 初始化数据库
-│   └── create_admin.py           # 创建管理员
+│   ├── create_admin.py           # 创建管理员
+│   └── backup.py                 # 数据备份
 │
-├── tests/                        # 测试
-│   ├── conftest.py
-│   └── test_auth.py
-│
-├── docs/                         # 文档
+├── tests/                        # 73 项测试
+├── docs/images/                  # 界面截图
+├── docker/                       # Docker 部署
 ├── .env.example                  # 环境变量模板
 ├── requirements.txt
 ├── run.py                        # 统一入口
@@ -227,6 +227,32 @@ User (用户)
   └── Conversation (对话)
 ```
 
+### 数据库迁移（Alembic）
+
+```bash
+# 空库：直接建到最新
+alembic upgrade head
+
+# 已有库（表由 create_all 建的）：先打基线，避免重复建表
+alembic stamp head
+
+# 改完模型后生成新迁移
+alembic revision --autogenerate -m "describe change"
+```
+
+迁移脚本在 `alembic/versions/`；数据库 URL 从 `app.config.settings` 读取，
+可用 `DATABASE_URL` 环境变量覆盖。
+
+### 数据备份
+
+```bash
+python scripts/backup.py                 # 写到 backups/，保留最近 7 份
+python scripts/backup.py --keep 14
+python scripts/backup.py --out D:/backups
+```
+
+备份内容：`data/rag.db`（SQLite 在线一致性快照）、`knowledge_bases/`、`conversations/`。
+
 ---
 
 ## 🐳 Docker 部署
@@ -251,6 +277,8 @@ docker-compose down
 - **bcrypt 密码哈希** — 12 轮迭代，抗暴力破解
 - **HMAC 签名 Session** — 防止 Token 伪造
 - **用户数据隔离** — 知识库、文档、对话按用户分离
+- **接口限流** — 认证 30 次/分、问答 20 次/分（按 IP 滑动窗口）
+- **健康检查** — `/api/health` 同时检查 API、数据库与知识库目录
 - **数据本地存储** — 不依赖任何第三方云服务
 - **可配置 SECRET_KEY** — 生产环境必须替换
 
@@ -259,12 +287,14 @@ docker-compose down
 ## 🧪 测试
 
 ```bash
-# 运行全部测试
-python -m pytest tests/ -v
+# 运行全部测试（当前 73 项）
+python -m pytest tests/ -q
 
 # 运行特定测试
 python -m pytest tests/test_auth.py -v
 ```
+
+覆盖认证、越权、XSS/路径穿越、限流、备份、迁移基线等。
 
 ---
 
@@ -275,9 +305,10 @@ python -m pytest tests/test_auth.py -v
 | v1.0 | 基础 RAG 功能 | ✅ |
 | v2.0 | 多知识库、Agent 模式、流式输出 | ✅ |
 | v3.0 | 用户认证、数据库持久化、Docker 部署 | ✅ |
-| v4.0 | 多模型接入（OpenAI/文心/通义） | 📅 计划中 |
-| v4.1 | 混合检索（BM25 + Reranker） | 📅 计划中 |
-| v5.0 | 多模态（图片/语音）、API 接口 | 📅 规划中 |
+| v4.0 | 多模型接入 + FastAPI/React 前端 | ✅ |
+| v4.1 | 混合检索（BM25 + Reranker） | ✅ |
+| v4.2 | 工程化：Alembic / 限流 / 健康检查 / 备份 / 73 项测试 | ✅ |
+| v5.0 | 多模态（图片/语音）、开放 API | 📅 规划中 |
 
 ---
 
