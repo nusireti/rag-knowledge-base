@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 from pathlib import Path
 from typing import Generator, List, Optional
 
@@ -289,12 +290,17 @@ def retrieve_docs(
         vector_dir: 向量库路径
         use_hybrid: 是否使用 BM25+向量混合检索
     """
+    t0 = time.perf_counter()
+
     if use_hybrid:
         try:
             from app.rag.hybrid import get_hybrid_retriever
             retriever = get_hybrid_retriever(vector_dir)
             docs = retriever.invoke(question)
-            logger.debug(f"混合检索到 {len(docs)} 个文档块")
+            elapsed = (time.perf_counter() - t0) * 1000
+            logger.info(
+                f"[RAG] retrieve mode=hybrid chunks={len(docs)} elapsed={elapsed:.0f}ms"
+            )
             return docs
         except Exception as e:
             logger.warning(f"混合检索失败，降级到纯向量检索: {e}")
@@ -307,10 +313,14 @@ def retrieve_docs(
             search_kwargs={"k": settings.RETRIEVAL_K},
         )
         docs = retriever.invoke(question)
-        logger.debug(f"向量检索到 {len(docs)} 个文档块")
+        elapsed = (time.perf_counter() - t0) * 1000
+        logger.info(
+            f"[RAG] retrieve mode=vector chunks={len(docs)} elapsed={elapsed:.0f}ms"
+        )
         return docs
     except Exception as e:
-        logger.error(f"检索失败: {e}")
+        elapsed = (time.perf_counter() - t0) * 1000
+        logger.error(f"检索失败: {e} (elapsed={elapsed:.0f}ms)")
         return []
 
 
@@ -331,14 +341,21 @@ def ask(question: str, vector_dir: Optional[str] = None) -> dict:
     返回:
         {"answer": str, "source_documents": List[Document]}
     """
+    t0 = time.perf_counter()
     sources = retrieve_docs(question, vector_dir)
     context = format_docs(sources)
     messages = _build_messages(question, context)
 
     llm = get_llm(streaming=False)
+    t_llm = time.perf_counter()
     raw = llm.invoke(messages).content
     answer = clean_output(raw)
 
+    logger.info(
+        f"[RAG] answer mode=non-stream sources={len(sources)} "
+        f"llm={(time.perf_counter() - t_llm) * 1000:.0f}ms "
+        f"total={(time.perf_counter() - t0) * 1000:.0f}ms"
+    )
     return {"answer": answer, "source_documents": sources}
 
 
@@ -351,18 +368,23 @@ def ask_stream(
     流式问答
     实时过滤 think 标签，末尾附加来源信息
     """
+    t_start = time.perf_counter()
     sources = retrieve_docs(question, vector_dir)
+    t_retrieved = time.perf_counter()
     context = format_docs(sources)
     messages = _build_messages(question, context, chat_history)
 
     llm = get_llm(streaming=True)
     in_think = False
     buffer = ""
+    first_token_at = None
 
     for chunk in llm.stream(messages):
         content = chunk.content
         if not content:
             continue
+        if first_token_at is None:
+            first_token_at = time.perf_counter()
 
         if in_think:
             buffer += content
@@ -392,6 +414,16 @@ def ask_stream(
             continue
 
         yield content
+
+    t_end = time.perf_counter()
+    ttft_ms = (first_token_at - t_retrieved) * 1000 if first_token_at else -1
+    logger.info(
+        f"[RAG] stream sources={len(sources)} "
+        f"retrieve={(t_retrieved - t_start) * 1000:.0f}ms "
+        f"ttft={ttft_ms:.0f}ms "
+        f"generate={(t_end - t_retrieved) * 1000:.0f}ms "
+        f"total={(t_end - t_start) * 1000:.0f}ms"
+    )
 
     # 来源信息
     sources_data = [

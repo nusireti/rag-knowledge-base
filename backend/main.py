@@ -18,6 +18,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 
 from backend.api import auth, knowledge_bases, documents, chat, models
+from kb_manager import cleanup_deleted_kbs
+
+# 清理上次删除知识库时因 Windows 文件句柄残留的墓碑目录
+cleanup_deleted_kbs()
 
 app = FastAPI(
     title="RAG 智能知识库 API",

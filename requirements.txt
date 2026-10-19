@@ -1,19 +1,46 @@
 # =============================================
 # RAG Knowledge Base - Python 依赖
 # 安装: pip install -r requirements.txt
+# Python 3.10+
 # =============================================
 
+# ---- Web / API ----
+fastapi>=0.115
+uvicorn[standard]>=0.30
+sse-starlette>=2.1
+python-multipart>=0.0.9
+
+# ---- LangChain ----
 langchain>=0.3.0
 langchain-community>=0.3.0
 langchain-openai>=0.2.0
 langchain-text-splitters>=0.3.0
 langchain-chroma>=0.2.0
+langchain-huggingface>=0.1.0
+langchain-ollama>=0.2.0
+
+# ---- 向量库 / 检索 ----
 chromadb>=0.4.0
+sentence-transformers>=3.0.0
+rank-bm25>=0.2.2
+
+# ---- 文档解析 ----
 pypdf>=4.0.0
 python-docx>=1.1.0
-streamlit>=1.28.0
-sqlalchemy>=2.0.0
+pymupdf>=1.24.0
+
+# ---- 认证 / 配置 ----
 bcrypt>=4.0.0
 pydantic-settings>=2.0.0
+sqlalchemy>=2.0.0
+
+# ---- 工具 ----
 tqdm>=4.66.0
 requests>=2.31.0
+
+# ---- 测试 ----
+pytest>=8.0.0
+httpx>=0.27.0
+
+# ---- 旧版 Streamlit 入口（已归档，仅为兼容保留） ----
+streamlit>=1.28.0

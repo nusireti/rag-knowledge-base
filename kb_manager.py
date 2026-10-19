@@ -12,6 +12,7 @@
 import os
 import re
 import json
+import gc
 import secrets
 import shutil
 from pathlib import Path
@@ -194,12 +195,110 @@ def create_knowledge_base(
 
 
 def delete_knowledge_base(kb_name: str) -> bool:
-    """删除知识库（kb_name 必须已通过 validate_kb_name）"""
+    """
+    删除知识库（kb_name 必须已通过 validate_kb_name）
+
+    Windows 上 Chroma / BM25 会在进程内持有目录句柄，直接 shutil.rmtree
+    会抛 PermissionError（9 月第 1 轮踩过同一类坑）。处理顺序：
+
+    1. 清掉进程内的混合检索 / 向量库缓存
+    2. 有向量库时先 reset 集合，尽量释放句柄
+    3. 尝试删除整个目录
+    4. 删不掉就降级：移除 config.json（让它从列表消失）+ 改名为墓碑目录，
+       留给下次启动时由 cleanup_deleted_kbs() 清理
+
+    任何情况下都不要把 PermissionError 抛给 API —— 否则前端只看到 500。
+    """
     path = _kb_path(kb_name)
     if not os.path.exists(path):
         return False
-    shutil.rmtree(path)
+
+    vector_dir = _kb_vector_path(kb_name)
+
+    try:
+        from app.rag.hybrid import clear_hybrid_cache
+        from app.rag.engine import clear_vector_store_cache
+
+        clear_hybrid_cache(vector_dir)
+        clear_vector_store_cache(vector_dir)
+    except Exception as e:
+        logger.debug(f"删除知识库前清理检索缓存失败（忽略）: {e}")
+
+    # 只有真的存在向量库时才走 Chroma，避免为删一个空库加载 embedding 模型
+    if os.path.exists(vector_dir):
+        try:
+            from app.rag.ingest import clear_index
+
+            clear_index(vector_dir)
+        except Exception as e:
+            logger.debug(f"删除知识库前清空向量集合失败（忽略）: {e}")
+
+    gc.collect()
+
+    # 打删除标记：万一目录被句柄占用删不掉，下次启动据此精确清理，
+    # 不会误伤 _unindexed_backup 这类本来就没有 config.json 的目录。
+    try:
+        Path(path, ".deleting").write_text("", encoding="utf-8")
+    except OSError as e:
+        logger.debug(f"写入删除标记失败（忽略）: {e}")
+
+    try:
+        shutil.rmtree(path)
+        return True
+    except PermissionError:
+        pass
+
+    # 兜底：让知识库先从列表里消失，再尽力删目录。
+    # config.json 是 list_knowledge_bases 的可见性开关。
+    try:
+        os.remove(_kb_config_path(kb_name))
+    except OSError:
+        pass
+
+    tombstone = f"{path}.deleted-{secrets.token_hex(4)}"
+    try:
+        os.replace(path, tombstone)
+    except OSError as e:
+        logger.warning(f"知识库目录无法改名（句柄仍被占用）: {path}: {e}")
+        return True
+
+    try:
+        shutil.rmtree(tombstone)
+    except OSError as e:
+        logger.warning(
+            f"知识库已下线，但残留目录暂未删除（下次启动可清）: {tombstone}: {e}"
+        )
     return True
+
+
+def cleanup_deleted_kbs():
+    """
+    清理删除知识库时留下的残留目录
+
+    两种形态：
+    1. `<name>.deleted-xxxx` 墓碑目录（改名成功但没删掉）
+    2. 带 `.deleting` 标记的原目录（连改名都失败）
+
+    进程重启后文件句柄已释放，启动时顺手删掉。
+    只认这两种精确标记，不会误删 `_unindexed_backup` 这类没有 config.json 的目录。
+    """
+    if not os.path.exists(KB_ROOT):
+        return
+    for entry in os.listdir(KB_ROOT):
+        target = os.path.join(KB_ROOT, entry)
+        if not os.path.isdir(target):
+            continue
+
+        is_tombstone = ".deleted-" in entry
+        is_marked = os.path.exists(os.path.join(target, ".deleting"))
+        if not (is_tombstone or is_marked):
+            continue
+
+        try:
+            shutil.rmtree(target)
+            logger.info(f"已清理遗留的知识库目录: {entry}")
+        except OSError as e:
+            logger.warning(f"清理遗留知识库目录失败: {entry}: {e}")
 
 
 # ===================== 文档 =====================

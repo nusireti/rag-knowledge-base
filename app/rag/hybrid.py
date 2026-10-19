@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 import pickle
+import threading
 from pathlib import Path
 from typing import List, Optional, Tuple
 
@@ -15,6 +16,33 @@ from langchain_core.documents import Document
 
 from app.config import settings
 from app.logger import logger
+
+
+# CrossEncoder 是重量级模型（bge-reranker-base 约 1.1GB）。
+# 早先每次 rerank 都重新实例化，等于每次问答都把权重重新加载一遍。
+# 改成进程级单例：第一次使用时加载，之后复用；加锁避免并发请求重复加载。
+_rerank_model = None
+_rerank_lock = threading.Lock()
+
+
+def get_rerank_model():
+    """懒加载并复用 CrossEncoder 模型（线程安全）"""
+    global _rerank_model
+    if _rerank_model is not None:
+        return _rerank_model
+    with _rerank_lock:
+        if _rerank_model is None:
+            from sentence_transformers import CrossEncoder
+
+            _rerank_model = CrossEncoder("BAAI/bge-reranker-base", device="cpu")
+    return _rerank_model
+
+
+def clear_rerank_model():
+    """释放 rerank 模型（测试或切换设备时使用）"""
+    global _rerank_model
+    with _rerank_lock:
+        _rerank_model = None
 
 
 class HybridRetriever:
@@ -199,10 +227,8 @@ class HybridRetriever:
         使用交叉编码器对检索结果重新排序，提升相关性
         """
         try:
-            from sentence_transformers import CrossEncoder
-
-            # 使用轻量级中文 rerank 模型
-            model = CrossEncoder("BAAI/bge-reranker-base", device="cpu")
+            # 复用进程级单例，避免每次问答重复加载模型权重
+            model = get_rerank_model()
             pairs = [(query, doc.page_content[:512]) for doc, _ in docs]
             scores = model.predict(pairs)
 
