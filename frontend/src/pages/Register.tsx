@@ -1,6 +1,8 @@
-import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { auth } from '../api';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { auth, getErrorMessage } from '../api';
+import { AuthShell } from '../components/AuthShell';
+import { Button, Spinner } from '../components/ui';
 
 export function RegisterPage() {
   const navigate = useNavigate();
@@ -11,118 +13,168 @@ export function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [codeSent, setCodeSent] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
+  const timer = useRef<number | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  useEffect(() => {
+    return () => {
+      if (timer.current) window.clearInterval(timer.current);
+    };
+  }, []);
+
+  const startCooldown = () => {
+    setCooldown(60);
+    if (timer.current) window.clearInterval(timer.current);
+    timer.current = window.setInterval(() => {
+      setCooldown((prev) => {
+        if (prev <= 1) {
+          if (timer.current) window.clearInterval(timer.current);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!username.trim() || !password) return;
+
     setLoading(true);
     setError('');
     try {
-      const res = await auth.register(username.trim(), password, email, verifyCode);
+      const res = await auth.register(
+        username.trim(),
+        password,
+        email.trim(),
+        verifyCode.trim(),
+      );
       localStorage.setItem('token', res.token);
       localStorage.setItem('username', res.username);
-      navigate('/app/knowledge-bases');
-    } catch (err: any) {
-      setError(err.message);
+      localStorage.setItem('display_name', res.display_name);
+      navigate('/app/knowledge-bases', { replace: true });
+    } catch (err) {
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
   };
 
   const sendCode = async () => {
-    if (!email) return;
+    if (!email.trim()) return;
+    setError('');
     try {
-      await auth.sendVerifyCode(email);
+      await auth.sendVerifyCode(email.trim());
       setCodeSent(true);
-    } catch (err: any) {
-      setError(err.message);
+      startCooldown();
+    } catch (err) {
+      setError(getErrorMessage(err));
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#F5F7FA] flex items-center justify-center p-4">
-      <div className="w-full max-w-[400px] bg-white rounded-2xl shadow-lg p-8">
-        <div className="text-center mb-8">
-          <div className="text-4xl mb-3">🦝</div>
-          <h1 className="text-xl font-semibold text-[#2D3748]">创建账号</h1>
-          <p className="text-sm text-[#718096] mt-1">注册 RAG 智能知识库</p>
+    <AuthShell
+      title="创建账号"
+      subtitle="几步之后，你就可以上传文档并开始问答"
+      footer={
+        <>
+          已有账号？
+          <Link to="/login"> 去登录</Link>
+        </>
+      }
+    >
+      <form onSubmit={handleSubmit}>
+        <div className="field">
+          <label className="label" htmlFor="reg-username">
+            用户名
+          </label>
+          <input
+            id="reg-username"
+            className="input"
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="至少 2 个字符"
+            autoComplete="username"
+            autoFocus
+          />
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-[#4A5568] mb-1">用户名</label>
+        <div className="field">
+          <label className="label" htmlFor="reg-email">
+            邮箱 <span style={{ color: 'var(--ink-mute)' }}>（可选）</span>
+          </label>
+          <div style={{ display: 'flex', gap: 8 }}>
             <input
+              id="reg-email"
+              className="input"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="用于接收验证码"
+              autoComplete="email"
+            />
+            <Button
+              size="sm"
+              onClick={sendCode}
+              disabled={!email.trim() || cooldown > 0}
+              style={{ flexShrink: 0 }}
+            >
+              {cooldown > 0 ? `${cooldown}s` : codeSent ? '重发' : '发送'}
+            </Button>
+          </div>
+        </div>
+
+        {codeSent ? (
+          <div className="field">
+            <label className="label" htmlFor="reg-code">
+              验证码
+            </label>
+            <input
+              id="reg-code"
+              className="input"
               type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="w-full px-4 py-2.5 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#6C8CFF] transition-all"
-              placeholder="至少2个字符"
+              value={verifyCode}
+              onChange={(e) => setVerifyCode(e.target.value)}
+              placeholder="输入邮箱收到的验证码"
+              autoComplete="one-time-code"
             />
           </div>
+        ) : null}
 
-          <div>
-            <label className="block text-sm font-medium text-[#4A5568] mb-1">邮箱（可选）</label>
-            <div className="flex gap-2">
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="flex-1 px-4 py-2.5 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#6C8CFF] transition-all"
-                placeholder="用于接收验证码"
-              />
-              <button
-                type="button"
-                onClick={sendCode}
-                disabled={!email}
-                className="px-3 py-2.5 bg-[#EDF2F7] hover:bg-[#E2E8F0] text-sm rounded-lg transition-all disabled:opacity-50"
-              >
-                发送
-              </button>
-            </div>
-          </div>
+        <div className="field">
+          <label className="label" htmlFor="reg-password">
+            密码
+          </label>
+          <input
+            id="reg-password"
+            className="input"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="至少 8 位，需包含字母和数字"
+            autoComplete="new-password"
+          />
+          <div className="hint">至少 8 位，需同时包含字母和数字。</div>
+        </div>
 
-          {codeSent && (
-            <div>
-              <label className="block text-sm font-medium text-[#4A5568] mb-1">验证码</label>
-              <input
-                type="text"
-                value={verifyCode}
-                onChange={(e) => setVerifyCode(e.target.value)}
-                className="w-full px-4 py-2.5 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#6C8CFF] transition-all"
-                placeholder="输入邮箱收到的验证码"
-              />
-            </div>
+        {error ? <div className="form-error">{error}</div> : null}
+
+        <Button
+          type="submit"
+          variant="primary"
+          className="btn-block"
+          disabled={loading || !username.trim() || !password}
+        >
+          {loading ? (
+            <>
+              <Spinner size={14} /> 注册中
+            </>
+          ) : (
+            '创建账号'
           )}
-
-          <div>
-            <label className="block text-sm font-medium text-[#4A5568] mb-1">密码</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-2.5 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#6C8CFF] transition-all"
-              placeholder="至少8位，需包含字母和数字"
-            />
-          </div>
-
-          {error && (
-            <div className="text-sm text-red-500 bg-red-50 px-3 py-2 rounded-lg">{error}</div>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-2.5 bg-[#6C8CFF] hover:bg-[#5A7AE8] text-white font-medium rounded-lg text-sm transition-all disabled:opacity-50"
-          >
-            {loading ? '注册中...' : '注册'}
-          </button>
-        </form>
-
-        <p className="text-center text-sm text-[#718096] mt-6">
-          已有账号？
-          <Link to="/login" className="text-[#6C8CFF] hover:underline ml-1">登录</Link>
-        </p>
-      </div>
-    </div>
+        </Button>
+      </form>
+    </AuthShell>
   );
 }
