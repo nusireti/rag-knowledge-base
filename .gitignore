@@ -17,6 +17,7 @@ conversations/
 knowledge_bases/
 vector_store/
 documents/
+backups/
 
 # 系统
 .DS_Store
