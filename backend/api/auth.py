@@ -52,12 +52,22 @@ async def login(req: LoginRequest):
     )
 
 
+@router.get("/capabilities")
+async def auth_capabilities():
+    """前端用来判断是否展示邮箱验证流程。"""
+    from app.verify import email_verification_enabled
+
+    return {"email_verification": email_verification_enabled()}
+
+
 @router.post("/register")
 async def register(req: RegisterRequest):
     """用户注册（带可选的验证码校验）"""
-    # 验证码校验
-    if req.email:
-        from app.verify import verify_code
+    from app.verify import email_verification_enabled, verify_code
+
+    # 只有邮件服务真正可用时才强制验证码。
+    # 未配置 SMTP 时如果还强制，注册页会永远卡在「验证码发送失败」。
+    if req.email and email_verification_enabled():
         if not verify_code(req.email, req.verify_code):
             raise HTTPException(status_code=400, detail="验证码错误或已过期")
 
@@ -81,8 +91,15 @@ async def register(req: RegisterRequest):
 
 @router.post("/verify-code")
 async def send_verify_code(req: VerifyCodeRequest):
-    """发送邮箱验证码"""
-    from app.verify import send_verify_code as _send
+    """发送邮箱验证码（未配置 SMTP 时明确告知，而不是 500）"""
+    from app.verify import email_verification_enabled, send_verify_code as _send
+
+    if not email_verification_enabled():
+        raise HTTPException(
+            status_code=503,
+            detail="邮件服务未配置，注册时可直接留空邮箱",
+        )
+
     ok = _send(req.email)
     if not ok:
         raise HTTPException(status_code=500, detail="验证码发送失败")

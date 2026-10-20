@@ -5,7 +5,7 @@
   <img src="https://img.shields.io/badge/TypeScript-5.9+-3178C6?style=flat-square&logo=typescript" alt="TypeScript">
   <img src="https://img.shields.io/badge/LangChain-1.3+-green?style=flat-square" alt="LangChain">
   <img src="https://img.shields.io/badge/ChromaDB-1.5-purple?style=flat-square" alt="Vector DB">
-  <img src="https://img.shields.io/badge/Tests-73%20passed-success?style=flat-square" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-86%20passed-success?style=flat-square" alt="Tests">
   <img src="https://img.shields.io/badge/Version-4.2-brightgreen?style=flat-square" alt="Version">
 </p>
 
@@ -287,7 +287,7 @@ docker-compose down
 ## 🧪 测试
 
 ```bash
-# 运行全部测试（当前 73 项）
+# 运行全部测试（当前 86 项）
 python -m pytest tests/ -q
 
 # 运行特定测试
@@ -307,7 +307,7 @@ python -m pytest tests/test_auth.py -v
 | v3.0 | 用户认证、数据库持久化、Docker 部署 | ✅ |
 | v4.0 | 多模型接入 + FastAPI/React 前端 | ✅ |
 | v4.1 | 混合检索（BM25 + Reranker） | ✅ |
-| v4.2 | 工程化：Alembic / 限流 / 健康检查 / 备份 / 73 项测试 | ✅ |
+| v4.2 | 工程化：Alembic / 限流 / 健康检查 / 备份 / 86 项测试 | ✅ |
 | v5.0 | 多模态（图片/语音）、开放 API | 📅 规划中 |
 
 ---

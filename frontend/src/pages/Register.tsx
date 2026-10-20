@@ -14,9 +14,17 @@ export function RegisterPage() {
   const [error, setError] = useState('');
   const [codeSent, setCodeSent] = useState(false);
   const [cooldown, setCooldown] = useState(0);
+  const [emailVerification, setEmailVerification] = useState<boolean | null>(
+    null,
+  );
   const timer = useRef<number | null>(null);
 
   useEffect(() => {
+    auth
+      .capabilities()
+      .then((cap) => setEmailVerification(cap.email_verification))
+      .catch(() => setEmailVerification(false));
+
     return () => {
       if (timer.current) window.clearInterval(timer.current);
     };
@@ -46,8 +54,8 @@ export function RegisterPage() {
       const res = await auth.register(
         username.trim(),
         password,
-        email.trim(),
-        verifyCode.trim(),
+        emailVerification ? email.trim() : '',
+        emailVerification ? verifyCode.trim() : '',
       );
       localStorage.setItem('token', res.token);
       localStorage.setItem('username', res.username);
@@ -100,47 +108,56 @@ export function RegisterPage() {
           />
         </div>
 
-        <div className="field">
-          <label className="label" htmlFor="reg-email">
-            邮箱 <span style={{ color: 'var(--ink-mute)' }}>（可选）</span>
-          </label>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <input
-              id="reg-email"
-              className="input"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="用于接收验证码"
-              autoComplete="email"
-            />
-            <Button
-              size="sm"
-              onClick={sendCode}
-              disabled={!email.trim() || cooldown > 0}
-              style={{ flexShrink: 0 }}
-            >
-              {cooldown > 0 ? `${cooldown}s` : codeSent ? '重发' : '发送'}
-            </Button>
-          </div>
-        </div>
+        {emailVerification === null ? null : emailVerification ? (
+          <>
+            <div className="field">
+              <label className="label" htmlFor="reg-email">
+                邮箱 <span style={{ color: 'var(--ink-mute)' }}>（可选）</span>
+              </label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  id="reg-email"
+                  className="input"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="用于接收验证码"
+                  autoComplete="email"
+                />
+                <Button
+                  size="sm"
+                  onClick={sendCode}
+                  disabled={!email.trim() || cooldown > 0}
+                  style={{ flexShrink: 0 }}
+                >
+                  {cooldown > 0 ? `${cooldown}s` : codeSent ? '重发' : '发送'}
+                </Button>
+              </div>
+            </div>
 
-        {codeSent ? (
-          <div className="field">
-            <label className="label" htmlFor="reg-code">
-              验证码
-            </label>
-            <input
-              id="reg-code"
-              className="input"
-              type="text"
-              value={verifyCode}
-              onChange={(e) => setVerifyCode(e.target.value)}
-              placeholder="输入邮箱收到的验证码"
-              autoComplete="one-time-code"
-            />
+            {codeSent ? (
+              <div className="field">
+                <label className="label" htmlFor="reg-code">
+                  验证码
+                </label>
+                <input
+                  id="reg-code"
+                  className="input"
+                  type="text"
+                  value={verifyCode}
+                  onChange={(e) => setVerifyCode(e.target.value)}
+                  placeholder="输入邮箱收到的验证码"
+                  autoComplete="one-time-code"
+                />
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <div className="note" style={{ marginBottom: 16 }}>
+            当前未启用邮箱验证，填写用户名和密码即可注册。
+            需要邮箱验证时，在 <code>.env</code> 里配置 SMTP 后重启后端。
           </div>
-        ) : null}
+        )}
 
         <div className="field">
           <label className="label" htmlFor="reg-password">

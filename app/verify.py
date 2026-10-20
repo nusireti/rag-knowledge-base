@@ -19,6 +19,11 @@ from app.logger import logger
 _codes: dict[str, dict] = {}
 
 
+def email_verification_enabled() -> bool:
+    """邮件验证是否可用：需要开启 SMTP 且填了账号与授权码。"""
+    return bool(settings.SMTP_ENABLE and settings.SMTP_USER and settings.SMTP_PASSWORD)
+
+
 def generate_code(length: int = 6) -> str:
     """生成随机数字验证码"""
     return "".join(random.choices(string.digits, k=length))
@@ -26,8 +31,8 @@ def generate_code(length: int = 6) -> str:
 
 def send_email(to: str, subject: str, body: str) -> bool:
     """发送邮件"""
-    if not settings.SMTP_ENABLE:
-        logger.warning("SMTP 未启用，无法发送邮件")
+    if not email_verification_enabled():
+        logger.warning("SMTP 未配置完整，无法发送邮件")
         return False
 
     try:

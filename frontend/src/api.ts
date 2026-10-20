@@ -84,6 +84,8 @@ export const auth = {
       body: JSON.stringify({ email }),
     }),
   getMe: () => request<UserInfo>('/auth/me'),
+  capabilities: () =>
+    request<{ email_verification: boolean }>('/auth/capabilities'),
 };
 
 /* ------------------------------------------------------------------ */

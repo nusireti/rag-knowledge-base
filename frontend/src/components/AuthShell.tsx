@@ -40,7 +40,7 @@ export function AuthShell({
           </div>
           <div className="auth-point">
             <b>可验证的工程</b>
-            <span>68 项测试 · 多租户隔离 · 安全加固</span>
+            <span>86 项测试 · 多租户隔离 · 安全加固</span>
           </div>
         </div>
 
