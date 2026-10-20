@@ -229,6 +229,12 @@ def get_user_by_username(username: str) -> Optional[User]:
         return db.query(User).filter(User.username == username).first()
 
 
+def get_user_by_email(email: str) -> Optional[User]:
+    """根据邮箱获取用户"""
+    with get_db() as db:
+        return db.query(User).filter(User.email == email).first()
+
+
 # ===================== Session Token =====================
 
 def _sign_token(payload: str) -> str:

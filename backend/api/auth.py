@@ -5,7 +5,14 @@
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel, EmailStr, Field
 
-from app.auth import authenticate_user, create_user, create_session, get_user_by_username
+from app.auth import (
+    authenticate_user,
+    create_session,
+    create_user,
+    get_user_by_email,
+    get_user_by_username,
+    validate_password,
+)
 from app.database import init_db
 
 router = APIRouter()
@@ -62,21 +69,44 @@ async def auth_capabilities():
 
 @router.post("/register")
 async def register(req: RegisterRequest):
-    """用户注册（带可选的验证码校验）"""
+    """用户注册（校验顺序：输入 → 唯一性 → 验证码）。"""
     from app.verify import email_verification_enabled, verify_code
 
-    # 只有邮件服务真正可用时才强制验证码。
-    # 未配置 SMTP 时如果还强制，注册页会永远卡在「验证码发送失败」。
-    if req.email and email_verification_enabled():
-        if not verify_code(req.email, req.verify_code):
-            raise HTTPException(status_code=400, detail="验证码错误或已过期")
+    username = req.username.strip()
 
-    # 检查用户是否已存在
-    existing = get_user_by_username(req.username)
-    if existing:
+    # ---- 输入合法性 ----
+    if not (2 <= len(username) <= 32):
+        raise HTTPException(status_code=400, detail="用户名长度需在 2-32 个字符之间")
+    if not username.replace("_", "").replace("-", "").isalnum():
+        raise HTTPException(
+            status_code=400,
+            detail="用户名只能包含字母、数字、下划线和短横线",
+        )
+
+    valid, msg = validate_password(req.password)
+    if not valid:
+        raise HTTPException(status_code=400, detail=msg)
+
+    email = req.email.strip()
+    if email and ("@" not in email or "." not in email):
+        raise HTTPException(status_code=400, detail="邮箱格式不正确")
+
+    # ---- 唯一性 ----
+    if get_user_by_username(username):
         raise HTTPException(status_code=409, detail="用户名已被注册")
 
-    user = create_user(req.username, req.password, email=req.email)
+    if email and get_user_by_email(email):
+        raise HTTPException(
+            status_code=409,
+            detail="该邮箱已被注册，请换一个邮箱或留空",
+        )
+
+    # ---- 验证码（仅邮件服务可用且填了邮箱时） ----
+    if email and email_verification_enabled():
+        if not verify_code(email, req.verify_code):
+            raise HTTPException(status_code=400, detail="验证码错误或已过期")
+
+    user = create_user(username, req.password, email=email)
     if not user:
         raise HTTPException(status_code=400, detail="注册失败，请检查信息")
 

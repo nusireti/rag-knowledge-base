@@ -91,3 +91,59 @@ def test_me_rejects_missing_token():
     res = client.get('/api/auth/me')
 
     assert res.status_code == 401
+
+
+def test_register_existing_email_returns_409():
+    client = TestClient(app)
+    first = client.post(
+        '/api/auth/register',
+        json={
+            'username': 'emailuser1',
+            'password': 'Pass12345',
+            'email': 'taken@example.com',
+            'verify_code': '',
+        },
+    )
+    assert first.status_code == 200
+
+    second = client.post(
+        '/api/auth/register',
+        json={
+            'username': 'emailuser2',
+            'password': 'Pass12345',
+            'email': 'taken@example.com',
+            'verify_code': '',
+        },
+    )
+    assert second.status_code == 409
+    assert '邮箱' in second.json()['detail']
+
+
+def test_register_weak_password_returns_400():
+    client = TestClient(app)
+    res = client.post(
+        '/api/auth/register',
+        json={
+            'username': 'weakuser2',
+            'password': 'abc123',
+            'email': '',
+            'verify_code': '',
+        },
+    )
+    assert res.status_code == 400
+    assert '密码' in res.json()['detail']
+
+
+def test_register_invalid_username_returns_400():
+    client = TestClient(app)
+    res = client.post(
+        '/api/auth/register',
+        json={
+            'username': 'bad name!',
+            'password': 'Pass12345',
+            'email': '',
+            'verify_code': '',
+        },
+    )
+    assert res.status_code == 400
+    assert '用户名' in res.json()['detail']
