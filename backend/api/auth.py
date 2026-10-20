@@ -2,7 +2,7 @@
 认证 API: 登录、注册、验证码
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel, EmailStr, Field
 
 from app.auth import authenticate_user, create_user, create_session, get_user_by_username
@@ -107,10 +107,17 @@ async def send_verify_code(req: VerifyCodeRequest):
 
 
 @router.get("/me")
-async def get_current_user(token: str):
-    """根据 Token 获取当前用户信息"""
+async def get_current_user(authorization: str = Header(""), token: str = ""):
+    """获取当前用户信息（兼容 Bearer header 与 ?token= 查询参数）"""
     from app.auth import validate_session, get_user_by_id
-    user_id = validate_session(token)
+
+    raw_token = token
+    if not raw_token and authorization.startswith("Bearer "):
+        raw_token = authorization[7:]
+    if not raw_token:
+        raise HTTPException(status_code=401, detail="未登录")
+
+    user_id = validate_session(raw_token)
     if not user_id:
         raise HTTPException(status_code=401, detail="Token 无效或已过期")
     user = get_user_by_id(user_id)

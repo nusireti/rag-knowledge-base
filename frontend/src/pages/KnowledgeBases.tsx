@@ -76,6 +76,8 @@ export function KnowledgeBasesPage() {
   };
 
   useEffect(() => {
+    // 首次挂载拉取列表：异步 setState 是预期行为
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadKbs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

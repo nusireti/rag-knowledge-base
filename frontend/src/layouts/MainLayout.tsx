@@ -58,10 +58,6 @@ export function MainLayout() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    setMenuOpen(false);
-  }, [location.pathname]);
-
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('username');
@@ -110,7 +106,10 @@ export function MainLayout() {
                 <button
                   key={item.path}
                   className={`nav-link ${active ? 'active' : ''}`}
-                  onClick={() => navigate(item.path)}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    navigate(item.path);
+                  }}
                 >
                   <Icon size={15} />
                   <span>{item.label}</span>

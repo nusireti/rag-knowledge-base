@@ -91,6 +91,15 @@ export function ChatPage() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  const refreshConversations = async () => {
+    try {
+      const res = await chatApi.listConversations();
+      setConversations(res.data || []);
+    } catch {
+      /* 列表加载失败不打断主流程 */
+    }
+  };
+
   /* ---------------- 初始化 ---------------- */
   useEffect(() => {
     kbApi
@@ -101,6 +110,7 @@ export function ChatPage() {
         setKbName((prev) => prev || list[0]?.name || '');
       })
       .catch((err) => toast.push(getErrorMessage(err), 'error'));
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refreshConversations();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -109,15 +119,6 @@ export function ChatPage() {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages]);
-
-  const refreshConversations = async () => {
-    try {
-      const res = await chatApi.listConversations();
-      setConversations(res.data || []);
-    } catch {
-      /* 列表加载失败不打断主流程 */
-    }
-  };
 
   /* ---------------- 对话操作 ---------------- */
   const newConversation = () => {

@@ -63,3 +63,31 @@ def test_register_with_email_skips_code_when_smtp_disabled():
 
     assert res.status_code == 200
     assert res.json()['username'] == 'reguser2'
+
+
+def test_me_accepts_bearer_header():
+    client = TestClient(app)
+    reg = client.post(
+        '/api/auth/register',
+        json={
+            'username': 'meuser',
+            'password': 'Pass12345',
+            'email': '',
+            'verify_code': '',
+        },
+    )
+    token = reg.json()['token']
+
+    res = client.get(
+        '/api/auth/me', headers={'Authorization': f'Bearer {token}'}
+    )
+
+    assert res.status_code == 200
+    assert res.json()['username'] == 'meuser'
+
+
+def test_me_rejects_missing_token():
+    client = TestClient(app)
+    res = client.get('/api/auth/me')
+
+    assert res.status_code == 401

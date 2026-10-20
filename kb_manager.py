@@ -357,6 +357,10 @@ def save_uploaded_file(kb_name: str, filename: str, data: bytes) -> tuple:
     if len(data) > MAX_SIZE:
         raise ValueError(f"文件过大（最大 {MAX_SIZE // 1024 // 1024}MB）")
 
+    # 空文件没有可索引内容，直接拒绝；否则会出现"上传成功但索引失败"的误导性提示
+    if not data:
+        raise ValueError("文件为空")
+
     # 内容体检：文档格式里出现脚本标记，只记日志不拦截
     # （用户完全可能在文档里讨论 <script>，一刀切会误伤）
     try:
