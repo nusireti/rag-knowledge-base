@@ -13,6 +13,8 @@ if str(_root) not in sys.path:
 if str(_root.parent) not in sys.path:
     sys.path.insert(0, str(_root.parent))
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
@@ -27,12 +29,25 @@ from kb_manager import KB_ROOT, cleanup_deleted_kbs
 # 清理上次删除知识库时因 Windows 文件句柄残留的墓碑目录
 cleanup_deleted_kbs()
 
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """启动钩子：后台预热 LLM（不阻塞启动，失败不影响服务）。"""
+    from app.config import settings
+
+    if settings.WARMUP_ON_STARTUP:
+        from app.rag.engine import start_warmup
+
+        start_warmup()
+    yield
+
+
 app = FastAPI(
     title="RAG 智能知识库 API",
     version="4.0",
     description="企业级 RAG 知识库后端 API",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
+    lifespan=lifespan,
 )
 
 # ---- 安全中间件 ----

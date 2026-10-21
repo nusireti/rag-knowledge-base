@@ -15,6 +15,9 @@ import {
   Sparkles,
   Trash2,
 } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkBreaks from 'remark-breaks';
+import remarkGfm from 'remark-gfm';
 import {
   chat as chatApi,
   getErrorMessage,
@@ -383,16 +386,25 @@ export function ChatPage() {
                     ) : msg.role === 'user' ? (
                       <div className="bubble-user">{msg.content}</div>
                     ) : (
-                      <div className="bubble-ai">
-                        {msg.content}
-                        {msg.streaming ? <span className="cursor" /> : null}
+                      <div className="bubble-ai markdown-body">
                         {msg.streaming && !msg.content ? (
                           <span className="typing">
                             <i />
                             <i />
                             <i />
                           </span>
-                        ) : null}
+                        ) : (
+                          <>
+                            <ReactMarkdown
+                              remarkPlugins={[remarkGfm, remarkBreaks]}
+                            >
+                              {msg.content}
+                            </ReactMarkdown>
+                            {msg.streaming ? (
+                              <span className="cursor" />
+                            ) : null}
+                          </>
+                        )}
 
                         {msg.sources && msg.sources.length > 0 ? (
                           <div className="sources">

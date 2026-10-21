@@ -81,6 +81,7 @@ class Settings(BaseSettings):
     LLM_TEMPERATURE: float = 0.1
     LLM_MAX_TOKENS: int = 1024
     LLM_CONTEXT_WINDOW: int = 2048
+    WARMUP_ON_STARTUP: bool = True  # 启动时后台预热模型，降低首次提问延迟
 
     # ---- RAG ----
     CHUNK_SIZE: int = 1000

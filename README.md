@@ -6,6 +6,7 @@
   <img src="https://img.shields.io/badge/LangChain-1.3+-green?style=flat-square" alt="LangChain">
   <img src="https://img.shields.io/badge/ChromaDB-1.5-purple?style=flat-square" alt="Vector DB">
   <img src="https://img.shields.io/badge/Tests-93%20passed-success?style=flat-square" alt="Tests">
+  <img src="https://github.com/nusireti/rag-knowledge-base/actions/workflows/ci.yml/badge.svg" alt="CI">
   <img src="https://img.shields.io/badge/Version-4.2-brightgreen?style=flat-square" alt="Version">
 </p>
 
@@ -67,7 +68,9 @@ RAG 智能知识库是一个基于 **LangChain + ChromaDB + Ollama** 的企业�
 - 🗄️ **数据库持久化** — SQLAlchemy + SQLite，替代 JSON 文件
 - 🐳 **Docker 部署** — 一键 docker-compose up
 - 📊 **结构化日志** — 日志文件轮转，生产可用
-- 🧪 **测试覆盖** — pytest 单元测试
+- 🧪 **测试覆盖** — 93 项 pytest + 前端 lint/build，CI 自动执行
+- ⚡ **启动预热** — 后端启动后台加载模型，首问延迟约 2s（原冷启动 ~19s）
+- 📝 **Markdown 回答** — 标题 / 列表 / 代码块 / 表格 / 引用正确渲染
 
 ---
 
@@ -295,6 +298,9 @@ python -m pytest tests/test_auth.py -v
 ```
 
 覆盖认证、越权、XSS/路径穿越、限流、备份、迁移基线等。
+
+CI 在每次 push / PR 自动运行后端 pytest + 前端 ESLint/build，
+配置见 `.github/workflows/ci.yml`。
 
 ---
 

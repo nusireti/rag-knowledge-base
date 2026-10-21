@@ -20,6 +20,8 @@ os.makedirs(_TMP_DIR, exist_ok=True)
 os.environ["DATABASE_URL"] = f"sqlite:///{os.path.join(_TMP_DIR, 'rag_test.db')}"
 # 测试里关闭限流：否则同一 TestClient IP 下的批量请求会互相干扰
 os.environ["RATE_LIMIT_ENABLED"] = "false"
+# 测试里关闭模型预热：CI 没有 Ollama，也不该在后台加载模型
+os.environ["WARMUP_ON_STARTUP"] = "false"
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
